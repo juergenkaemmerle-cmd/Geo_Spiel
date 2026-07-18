@@ -7,11 +7,10 @@ import math
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- FRAGENKATALOG DIREKT UND FRISCH LADEN (OHNE CACHE) ---
+# --- FRAGENKATALOG DIREKT UND FRISCH LADEN ---
 def lade_fragen():
     try:
         df = pd.read_csv("fragen.csv", sep=";")
-        # Sicherheitsgurt: Entfernt unsichtbare Leerzeichen aus Spalten und Texten
         df.columns = df.columns.str.strip()
         for col in df.columns:
             if df[col].dtype == "object":
@@ -21,7 +20,6 @@ def lade_fragen():
         st.error(f"Fehler beim Laden der fragen.csv: {e}")
         return pd.DataFrame(columns=["karte", "frage", "ziel", "info"])
 
-# Die Fragen werden jetzt bei JEDEM App-Start frisch von der Festplatte gelesen
 fragen_df = lade_fragen()
 
 # GPS-Grenzen exakt angepasst an deine Festland-Deutschlandkarte
@@ -29,22 +27,40 @@ KARTEN_DATEN = {
     "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 54.91), "such_zusatz": ", Germany"}
 }
 
-# Das volle 20x20 Spielfeld passend zu deinem 2200px Ausdruck
 GRID_SIZE = 20
-spalten = [chr(i) for i in range(ord('A'), ord('A') + GRID_SIZE)]  # A bis T
-zeilen = [str(i) for i in range(1, GRID_SIZE + 1)]               # 1 bis 20
-felder_liste = [s+z for s in spalten for z in zeilen]
+
+# ACHSEN-TAUSCH LAUT BILD:
+# X-Achse (waagerecht, West-Ost) = Zahlen 1 bis 20
+x_achsen_werte = [str(i) for i in range(1, GRID_SIZE + 1)]
+# Y-Achse (senkrecht, Nord-Süd) = Buchstaben A bis T
+y_achsen_werte = [chr(i) for i in range(ord('A'), ord('A') + GRID_SIZE)]
+
+# Generiert die Liste aller wählbaren Felder im Format "A1", "A2" ... bis "T20"
+# Wichtig: Der Buchstabe steht zuerst, da Spieler es so gewohnt sind ("A1")
+felder_liste = [b+z for b in y_achsen_werte for z in x_achsen_werte]
 
 def get_field_center_gps(feld, karte_name):
+    """Berechnet die echten GPS-Koordinaten für den Mittelpunkt eines Kästchens."""
     minx, miny, maxx, maxy = KARTEN_DATEN[karte_name]["bounds"]
-    s_idx = spalten.index(feld[0])
-    z_idx = int(feld[1:]) - 1
     
+    # Feld zerlegen (z.B. "K7" -> 'K' und "7")
+    b_char = feld[0].upper()
+    z_str = feld[1:]
+    
+    # Index auf den Achsen finden
+    y_idx = y_achsen_werte.index(b_char)  # Buchstabe bestimmt die Höhe (Y)
+    x_idx = x_achsen_werte.index(z_str)   # Zahl bestimmt die Breite (X)
+    
+    # Schrittweiten pro Kästchen berechnen
     lon_step = (maxx - minx) / GRID_SIZE
     lat_step = (maxy - miny) / GRID_SIZE
     
-    center_lon = minx + (s_idx + 0.5) * lon_step
-    center_lat = maxy - (z_idx + 0.5) * lat_step  
+    # Mittelpunkt (Index + 0.5)
+    # X (Längengrad) geht von Westen nach Osten
+    center_lon = minx + (x_idx + 0.5) * lon_step
+    # Y (Breitengrad) geht von Norden (A) nach Süden (T)
+    center_lat = maxy - (y_idx + 0.5) * lat_step  
+    
     return center_lon, center_lat
 
 def haversine_distance(lon1, lat1, lon2, lat2):
@@ -112,7 +128,6 @@ for i in range(anzahl_spieler):
         if name not in st.session_state.scores:
             st.session_state.scores[name] = 0
 
-# Punktestand anzeigen
 st.subheader("📊 Globaler Punktestand:")
 score_df = pd.DataFrame([{"Spieler": k, "Punkte": v} for k, v in st.session_state.scores.items() if k in spieler_namen])
 if not score_df.empty:
@@ -155,7 +170,7 @@ if st.button("Runde auflösen! 🎲", type="primary"):
         st.error("Kein gültiges Ziel in dieser Frage vorhanden.")
     else:
         with st.spinner("Orakel wird befragt (Geolokalisierung)..."):
-            geolocator = Nominatim(user_agent="geo_master_quiz_precise_v3")
+            geolocator = Nominatim(user_agent="geo_master_quiz_precise_v4")
             ziel_ort = st.session_state.aktuelle_frage["ziel"]
             such_string = ziel_ort + KARTEN_DATEN[gewaehlte_karte]["such_zusatz"]
             location = geolocator.geocode(such_string)
@@ -165,12 +180,20 @@ if st.button("Runde auflösen! 🎲", type="primary"):
         else:
             ziel_lon, ziel_lat = location.longitude, location.latitude
             
+            # --- NEUE BERECHNUNG MIT GEDREHTEN ACHSEN ---
             minx, miny, maxx, maxy = KARTEN_DATEN[gewaehlte_karte]["bounds"]
+            
+            # 1. Spalte finden (X-Achse, Zahlen 1-20)
             pct_x = (ziel_lon - minx) / (maxx - minx)
+            corr_x_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_x * GRID_SIZE))))
+            korrekte_zahl = x_achsen_werte[corr_x_idx]
+            
+            # 2. Zeile finden (Y-Achse, Buchstaben A-T von Nord nach Süd)
             pct_y = 1.0 - ((ziel_lat - miny) / (maxy - miny))
-            corr_col = spalten[max(0, min(GRID_SIZE - 1, int(math.floor(pct_x * GRID_SIZE))))]
-            corr_row = zeilen[max(0, min(GRID_SIZE - 1, int(math.floor(pct_y * GRID_SIZE))))]
-            korrektes_feld = f"{corr_col}{corr_row}"
+            corr_y_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_y * GRID_SIZE))))
+            korrekter_buchstabe = y_achsen_werte[corr_y_idx]
+            
+            korrektes_feld = f"{korrekter_buchstabe}{korrekte_zahl}"
             
             ergebnisse = []
             abstaende_km = {}
