@@ -3,82 +3,137 @@ import geopandas as gpd
 from shapely.geometry import Point
 from geopy.geocoders import Nominatim
 import numpy as np
+import pandas as pd
+import random
 
-# Seiten-Setup für Smartphones (Mobile First)
-st.set_page_config(page_title="Geo-Brettspiel", page_icon="🎲", layout="centered")
+st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# CSS für schöne, große Buttons auf dem Handy
-st.markdown("""
-    <style>
-    div.stButton > button:first-child {
-        width: 100%;
-        height: 60px;
-        font-size: 20px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
+# --- EXTERNEN FRAGENKATALOG AUS CSV LADEN ---
 @st.cache_data
-def load_data():
-    url = "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
-    world = gpd.read_file(url)
-    germany = world[world.ISO_A3 == "DEU"].to_crs(epsg=25832)
-    return germany
+def lade_fragen():
+    try:
+        # Lädt die CSV-Datei, die im selben Ordner liegt
+        df = pd.read_csv("fragen.csv", sep=";")
+        return df
+    except Exception as e:
+        st.error(f"Fehler beim Laden der fragen.csv: {e}")
+        return pd.DataFrame(columns=["karte", "frage", "ziel", "info"])
 
-# Daten laden
-germany = load_data()
-minx, miny, maxx, maxy = germany.total_bounds
+fragen_df = lade_fragen()
+
+KARTEN_DATEN = {
+    "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 55.05), "such_zusatz": ", Germany"},
+    "Baden-Württemberg 🥨": {"bounds": (7.51, 47.53, 10.50, 49.79), "such_zusatz": ", Baden-Wuerttemberg, Germany"},
+    "Weltkarte 🗺️": {"bounds": (-180.0, -60.0, 180.0, 85.0), "such_zusatz": ""}
+}
 
 spalten = ['A', 'B', 'C', 'D', 'E']
 zeilen = ['1', '2', '3', '4', '5', '6', '7']
-x_edges = np.linspace(minx, maxx, len(spalten) + 1)
-y_edges = np.linspace(miny, maxy, len(zeilen) + 1)
+felder_liste = [s+z for s in spalten for z in zeilen]
 
-def raster_zu_koordinate(feld):
+def get_raster_coords(feld, karte_name):
+    minx, miny, maxx, maxy = KARTEN_DATEN[karte_name]["bounds"]
     s_idx = spalten.index(feld[0])
     z_idx = zeilen.index(feld[1])
-    return Point((x_edges[s_idx] + x_edges[s_idx + 1]) / 2, (y_edges[z_idx] + y_edges[z_idx + 1]) / 2)
+    x_edges = np.linspace(minx, maxx, len(spalten) + 1)
+    y_edges = np.linspace(miny, maxy, len(zeilen) + 1)
+    return (x_edges[s_idx] + x_edges[s_idx + 1]) / 2, (y_edges[z_idx] + y_edges[z_idx + 1]) / 2
 
-# --- OBERFLÄCHE ---
-st.title("🗺️ Erdkunde Brettspiel")
-st.write("Nutzt euer ausgedrucktes A3-Raster auf dem Tisch!")
+# --- APP STATE ---
+if "aktuelle_frage" not in st.session_state:
+    st.session_state.aktuelle_frage = None
+if "vorherige_karte" not in st.session_state:
+    st.session_state.vorherige_karte = ""
 
-# Eingabe der Stadt
-stadt = st.text_input("Welche Stadt wird gesucht?", value="München")
+# --- INTERFACE ---
+st.title("🏆 Geo-Master Quiz-Leiter")
 
-# Touch-freundliche Dropdowns für die Spieler
-felder_liste = [s+z for s in spalten for z in zeilen]
-col1, col2 = st.columns(2)
+# 1. Kartenauswahl
+gewaehlte_karte = st.selectbox("Welche Karte liegt auf dem Tisch?", list(KARTEN_DATEN.keys()))
 
-with col1:
-    p1 = st.selectbox("Tipp Spieler 1 (Blau):", felder_liste, index=10)
-with col2:
-    p2 = st.selectbox("Tipp Spieler 2 (Rot):", felder_liste, index=15)
+if gewaehlte_karte != st.session_state.vorherige_karte:
+    st.session_state.aktuelle_frage = None
+    st.session_state.vorherige_karte = gewaehlte_karte
 
-# Großer Auswertungs-Button
-if st.button("Runde auswerten! 🎲"):
-    geolocator = Nominatim(user_agent="handy_brettspiel")
-    location = geolocator.geocode(f"{stadt}, Germany")
-    
-    if not location:
-        st.error("❌ Stadt nicht gefunden! Bitte Schreibweise prüfen.")
+st.divider()
+
+# 2. Spieler-Setup
+anzahl_spieler = st.number_input("Wie viele Spieler?", min_value=1, max_value=6, value=2)
+spieler_namen = []
+cols_spieler = st.columns(min(anzahl_spieler, 3))
+for i in range(anzahl_spieler):
+    with cols_spieler[i % 3]:
+        name = st.text_input(f"Name Spieler {i+1}:", value=f"Spieler {i+1}", key=f"name_{i}")
+        spieler_namen.append(name)
+
+st.divider()
+
+# 3. Fragen-Steuerung aus der Tabelle
+# Filtere alle Fragen, die zur gewählten Karte gehören
+verfuegbare_fragen = fragen_df[fragen_df["karte"] == gewaehlte_karte]
+
+if st.button("🔄 Neue Frage ziehen", type="secondary") or st.session_state.aktuelle_frage is None:
+    if not verfuegbare_fragen.empty:
+        # Wähle eine zufällige Zeile aus den gefilterten Fragen
+        zufaellige_zeile = verfuegbare_fragen.sample(n=1).iloc[0]
+        st.session_state.aktuelle_frage = {
+            "frage": zufaellige_zeile["frage"],
+            "ziel": zufaellige_zeile["ziel"],
+            "info": zufaellige_zeile["info"]
+        }
     else:
-        stadt_utm = gpd.GeoDataFrame(geometry=[Point(location.longitude, location.latitude)], crs="EPSG:4326").to_crs(epsg=25832)
-        echter_punkt = stadt_utm.geometry.iloc[0]
+        st.session_state.aktuelle_frage = {
+            "frage": "Keine Fragen für diese Karte in der CSV gefunden!",
+            "ziel": "",
+            "info": ""
+        }
+
+# Frage anzeigen
+st.info(f"❓ **DIE QUIZ-FRAGE:**\n\n### {st.session_state.aktuelle_frage['frage']}")
+
+st.divider()
+
+# 4. Tipps abfragen
+st.write("Layoutet eure Steine auf dem Brett und wählt euer Rasterfeld:")
+tipps = {}
+cols_tipps = st.columns(min(anzahl_spieler, 3))
+for i, name in enumerate(spieler_namen):
+    with cols_tipps[i % 3]:
+        tipp = st.selectbox(f"{name}:", felder_liste, key=f"tipp_{i}", index=10)
+        tipps[name] = tipp
+
+# 5. Auswertung
+if st.button("Runde auflösen! 🎲", type="primary"):
+    if st.session_state.aktuelle_frage["ziel"] == "":
+        st.error("Kein gültiges Ziel vorhanden.")
+    else:
+        geolocator = Nominatim(user_agent="geo_master_quiz_csv")
+        ziel_ort = st.session_state.aktuelle_frage["ziel"]
+        such_string = ziel_ort + KARTEN_DATEN[gewaehlte_karte]["such_zusatz"]
+        location = geolocator.geocode(such_string)
         
-        d1 = echter_punkt.distance(raster_zu_koordinate(p1)) / 1000
-        d2 = echter_punkt.distance(raster_zu_koordinate(p2)) / 1000
-        
-        st.subheader(f"📍 Ziel: {stadt.upper()}")
-        
-        # Schicke Info-Boxen für die Ergebnisse
-        st.info(f"🔵 Spieler 1 ({p1}): **{d1:.1f} km** entfernt")
-        st.warning(f"🔴 Spieler 2 ({p2}): **{d2:.1f} km** entfernt")
-        
-        # Sieger-Verkündung
-        if d1 < d2:
-            st.success(f"🏆 **SPIELER 1 GEWINNT DIE RUNDE!**")
-        elif d2 < d1:
-            st.success(f"🏆 **SPIELER 2 GEWINNT DIE RUNDE!**")
+        if not location:
+            st.error("Fehler bei der Ortung des Ziels. Bitte noch einmal versuchen.")
         else:
-            st.success("🤝 **Unentschieden!** Beide liegen gleich nah dran.")
+            st.success(f"🏁 **Lösung: {ziel_ort.upper()}**")
+            st.write(f"*💡 Hintergrund-Info: {st.session_state.aktuelle_frage['info']}*")
+            
+            ziel_lon, ziel_lat = location.longitude, location.latitude
+            ergebnisse = []
+            
+            for name, tipp in tipps.items():
+                tx, ty = get_raster_coords(tipp, gewaehlte_karte)
+                pro_grad_km = 111.0 
+                if gewaehlte_karte != "Weltkarte":
+                    distanz = np.sqrt((ziel_lon - tx)**2 + (ziel_lat - ty)**2) * pro_grad_km
+                else:
+                    distanz = np.sqrt((ziel_lon - tx)**2 + (ziel_lat - ty)**2) * 80.0
+                    
+                ergebnisse.append((name, tipp, distanz))
+            
+            ergebnisse.sort(key=lambda x: x[2])
+            
+            st.subheader("📊 Das Ergebnis dieser Runde:")
+            for rang, (name, tipp, dist) in enumerate(ergebnisse, 1):
+                medaille = "🥇" if rang == 1 else "🥈" if rang == 2 else "🥉" if rang == 3 else "⚫"
+                st.warning(f"{medaille} **Platz {rang}: {name}** (Feld {tipp}) — ca. **{dist:.1f} km** vom Ziel entfernt")
