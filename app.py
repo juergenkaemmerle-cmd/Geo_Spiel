@@ -1,139 +1,147 @@
-import streamlit as st
-import geopandas as gpd
-from shapely.geometry import Point
-from geopy.geocoders import Nominatim
-import numpy as np
-import pandas as pd
+import math
 import random
+from flask import Flask, render_template, request, redirect, url_for, session
 
-st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
+app = Flask(__name__)
+# WICHTIG: Ersetze das durch ein sicheres Geheimnis deiner Wahl
+app.secret_key = "super_geheimes_spiel_geheimnis_123"
 
-# --- EXTERNEN FRAGENKATALOG AUS CSV LADEN ---
-@st.cache_data
-def lade_fragen():
-    try:
-        # Lädt die CSV-Datei, die im selben Ordner liegt
-        df = pd.read_csv("fragen.csv", sep=";")
-        return df
-    except Exception as e:
-        st.error(f"Fehler beim Laden der fragen.csv: {e}")
-        return pd.DataFrame(columns=["karte", "frage", "ziel", "info"])
+# Spielfeld-Konfiguration (20x20 Gitter)
+GRID_SIZE = 20
+COLUMNS = [chr(i) for i in range(ord('A'), ord('A') + GRID_SIZE)]  # A bis T
 
-fragen_df = lade_fragen()
-
+# GPS-Grenzen exakt angepasst an deine Festland-Deutschlandkarte
 KARTEN_DATEN = {
-    "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 54.91), "such_zusatz": ", Germany"},
-    "Baden-Württemberg 🥨": {"bounds": (7.51, 47.53, 10.50, 49.79), "such_zusatz": ", Baden-Wuerttemberg, Germany"},
-    "Weltkarte 🗺️": {"bounds": (-180.0, -60.0, 180.0, 85.0), "such_zusatz": ""}
+    "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 54.91), "such_zusatz": ", Germany"}
 }
 
-spalten = ['A', 'B', 'C', 'D', 'E']
-zeilen = ['1', '2', '3', '4', '5', '6', '7']
-felder_liste = [s+z for s in spalten for z in zeilen]
+# Eine Liste von interessanten Beispiel-Städten für das Spiel
+STADT_POOL = [
+    "Berlin", "Hamburg", "München", "Köln", "Frankfurt am Main", 
+    "Stuttgart", "Düsseldorf", "Leipzig", "Dortmund", "Essen",
+    "Bremen", "Hannover", "Nürnberg", "Duisburg", "Flensburg",
+    "Freiburg im Breisgau", "Kiel", "Erfurt", "Magdeburg", "Saarbrücken",
+    "Rostock", "Kassel", "Trier", "Passau", "Garmisch-Partenkirchen",
+    "Görlitz", "Aachen", "Emden", "Cottbus", "Ulm"
+]
 
-def get_raster_coords(feld, karte_name):
-    minx, miny, maxx, maxy = KARTEN_DATEN[karte_name]["bounds"]
-    s_idx = spalten.index(feld[0])
-    z_idx = zeilen.index(feld[1])
-    x_edges = np.linspace(minx, maxx, len(spalten) + 1)
-    y_edges = np.linspace(miny, maxy, len(zeilen) + 1)
-    return (x_edges[s_idx] + x_edges[s_idx + 1]) / 2, (y_edges[z_idx] + y_edges[z_idx + 1]) / 2
+def get_grid_coordinates(lon, lat):
+    """Rechnet GPS-Koordinaten in ein Gitterfeld (A-T, 1-20) für das Festland um."""
+    min_lon, min_lat, max_lon, max_lat = KARTEN_DATEN["Deutschland 🇩🇪"]["bounds"]
+    
+    # Berechne, in welchem Prozentbereich der Punkt liegt
+    pct_x = (lon - min_lon) / (max_lon - min_lon)
+    # y-Achse umdrehen, da Zeile 1 im Norden (oben) und Zeile 20 im Süden (unten) ist
+    pct_y = 1.0 - ((lat - min_lat) / (max_lat - min_lat))
+    
+    # In Gitter-Index umwandeln (0 bis 19)
+    col_idx = int(math.floor(pct_x * GRID_SIZE))
+    row_idx = int(math.floor(pct_y * GRID_SIZE))
+    
+    # Begrenzen, falls der Punkt leicht außerhalb liegt
+    col_idx = max(0, min(GRID_SIZE - 1, col_idx))
+    row_idx = max(0, min(GRID_SIZE - 1, row_idx))
+    
+    # Rückgabe als (Buchstabe, Zahl von 1-20)
+    return COLUMNS[col_idx], row_idx + 1
 
-# --- APP STATE ---
-if "aktuelle_frage" not in st.session_state:
-    st.session_state.aktuelle_frage = None
-if "vorherige_karte" not in st.session_state:
-    st.session_state.vorherige_karte = ""
+def berechne_abstand(feld1, feld2):
+    """Berechnet den Abstand zwischen zwei Feldern (Manhattan-Distanz)."""
+    # feld ist ein String wie "K10"
+    col1, row1 = COLUMNS.index(feld1[0]), int(feld1[1:])
+    col2, row2 = COLUMNS.index(feld2[0]), int(feld2[1:])
+    return abs(col1 - col2) + abs(row1 - row2)
 
-# --- INTERFACE ---
-st.title("🏆 Geo-Master Quiz-Leiter")
+# Dummy-Funktion für die GPS-Suche (Ersetze dies durch deine echte API-Abfrage, falls vorhanden)
+def hole_stadt_gps(stadtname):
+    # Für diese Demo geben wir feste Koordinaten für ein paar bekannte Städte zurück
+    # Im echten Spiel fragt dein Code hier Nominatim/OpenStreetMap ab
+    koordinaten = {
+        "Berlin": (13.40, 52.52), "Hamburg": (10.00, 53.55), "München": (11.58, 48.13),
+        "Köln": (6.96, 50.94), "Frankfurt am Main": (8.68, 50.11), "Stuttgart": (9.18, 48.77),
+        "Aachen": (6.08, 50.77), "Görlitz": (14.99, 51.15), "Flensburg": (9.43, 54.78),
+        "Garmisch-Partenkirchen": (11.09, 47.49)
+    }
+    return koordinaten.get(stadtname, (9.99, 51.16)) # Standardmitte als Fallback
 
-# 1. Kartenauswahl
-gewaehlte_karte = st.selectbox("Welche Karte liegt auf dem Tisch?", list(KARTEN_DATEN.keys()))
-
-if gewaehlte_karte != st.session_state.vorherige_karte:
-    st.session_state.aktuelle_frage = None
-    st.session_state.vorherige_karte = gewaehlte_karte
-
-st.divider()
-
-# 2. Spieler-Setup
-anzahl_spieler = st.number_input("Wie viele Spieler?", min_value=1, max_value=6, value=2)
-spieler_namen = []
-cols_spieler = st.columns(min(anzahl_spieler, 3))
-for i in range(anzahl_spieler):
-    with cols_spieler[i % 3]:
-        name = st.text_input(f"Name Spieler {i+1}:", value=f"Spieler {i+1}", key=f"name_{i}")
-        spieler_namen.append(name)
-
-st.divider()
-
-# 3. Fragen-Steuerung aus der Tabelle
-# Filtere alle Fragen, die zur gewählten Karte gehören
-verfuegbare_fragen = fragen_df[fragen_df["karte"] == gewaehlte_karte]
-
-if st.button("🔄 Neue Frage ziehen", type="secondary") or st.session_state.aktuelle_frage is None:
-    if not verfuegbare_fragen.empty:
-        # Wähle eine zufällige Zeile aus den gefilterten Fragen
-        zufaellige_zeile = verfuegbare_fragen.sample(n=1).iloc[0]
-        st.session_state.aktuelle_frage = {
-            "frage": zufaellige_zeile["frage"],
-            "ziel": zufaellige_zeile["ziel"],
-            "info": zufaellige_zeile["info"]
-        }
-    else:
-        st.session_state.aktuelle_frage = {
-            "frage": "Keine Fragen für diese Karte in der CSV gefunden!",
-            "ziel": "",
-            "info": ""
-        }
-
-# Frage anzeigen
-st.info(f"❓ **DIE QUIZ-FRAGE:**\n\n### {st.session_state.aktuelle_frage['frage']}")
-
-st.divider()
-
-# 4. Tipps abfragen
-st.write("Layoutet eure Steine auf dem Brett und wählt euer Rasterfeld:")
-tipps = {}
-cols_tipps = st.columns(min(anzahl_spieler, 3))
-for i, name in enumerate(spieler_namen):
-    with cols_tipps[i % 3]:
-        tipp = st.selectbox(f"{name}:", felder_liste, key=f"tipp_{i}", index=10)
-        tipps[name] = tipp
-
-# 5. Auswertung
-if st.button("Runde auflösen! 🎲", type="primary"):
-    if st.session_state.aktuelle_frage["ziel"] == "":
-        st.error("Kein gültiges Ziel vorhanden.")
-    else:
-        geolocator = Nominatim(user_agent="geo_master_quiz_csv")
-        ziel_ort = st.session_state.aktuelle_frage["ziel"]
-        such_string = ziel_ort + KARTEN_DATEN[gewaehlte_karte]["such_zusatz"]
-        location = geolocator.geocode(such_string)
+@app.route('/')
+def index():
+    # Spielstand initialisieren, falls noch nicht vorhanden
+    if 'scores' not in session:
+        session['scores'] = {}
+    if 'runde' not in session:
+        session['runde'] = 0
+    if 'aktuelle_stadt' not in session:
+        session['aktuelle_stadt'] = random.choice(STADT_POOL)
         
-        if not location:
-            st.error("Fehler bei der Ortung des Ziels. Bitte noch einmal versuchen.")
-        else:
-            st.success(f"🏁 **Lösung: {ziel_ort.upper()}**")
-            st.write(f"*💡 Hintergrund-Info: {st.session_state.aktuelle_frage['info']}*")
+    # Korrektes Feld für die aktuelle Stadt berechnen
+    lon, lat = hole_stadt_gps(session['aktuelle_stadt'])
+    session['korrektes_feld'] = "".join(map(str, get_grid_coordinates(lon, lat)))
+    
+    return render_template('index.html', 
+                           stadt=session['aktuelle_stadt'], 
+                           scores=session['scores'], 
+                           runde=session['runde'])
+
+@app.route('/tippen', models=['POST'])
+def tippen():
+    # Tipps der Spieler aus dem Formular einsammeln
+    # Das Formular sendet z.B. spieler1="K10", spieler2="L11" etc.
+    tipps = {}
+    for key, val in request.form.items():
+        if key.startswith('spieler_') and val:
+            spieler_name = key.replace('spieler_', '')
+            tipps[spieler_name] = val.upper().strip()
             
-            ziel_lon, ziel_lat = location.longitude, location.latitude
-            ergebnisse = []
+    korrektes_feld = session['korrektes_feld']
+    scores = session['scores']
+    
+    # 1. Auswertung: Wer hat einen Volltreffer? (3 Punkte)
+    # Gleichzeitig berechnen wir die Abstände für den Trostpunkt
+    abstaende = {}
+    for spieler, tipp in tipps.items():
+        if spieler not in scores:
+            scores[spieler] = 0
             
-            for name, tipp in tipps.items():
-                tx, ty = get_raster_coords(tipp, gewaehlte_karte)
-                pro_grad_km = 111.0 
-                if gewaehlte_karte != "Weltkarte":
-                    distanz = np.sqrt((ziel_lon - tx)**2 + (ziel_lat - ty)**2) * pro_grad_km
-                else:
-                    distanz = np.sqrt((ziel_lon - tx)**2 + (ziel_lat - ty)**2) * 80.0
-                    
-                ergebnisse.append((name, tipp, distanz))
+        if tipp == korrektes_feld:
+            scores[spieler] += 3
             
-            ergebnisse.sort(key=lambda x: x[2])
-            
-            st.subheader("📊 Das Ergebnis dieser Runde:")
-            for rang, (name, tipp, dist) in enumerate(ergebnisse, 1):
-                medaille = "🥇" if rang == 1 else "🥈" if rang == 2 else "🥉" if rang == 3 else "⚫"
-                st.warning(f"{medaille} **Platz {rang}: {name}** (Feld {tipp}) — ca. **{dist:.1f} km** vom Ziel entfernt")
+        # Abstand zum korrekten Feld berechnen
+        abstaende[spieler] = berechne_abstand(tipp, korrektes_feld)
+    
+    # 2. Auswertung: Wer ist am nächsten dran? (1 Punkt)
+    if abstaende:
+        min_abstand = min(abstaende.values())
+        # Es können auch mehrere Spieler gleich nah dran sein!
+        for spieler, abstand in abstaende.items():
+            if abstand == min_abstand:
+                scores[spieler] += 1
+                
+    # Spielstand in der Session speichern
+    session['scores'] = scores
+    session['runde'] += 1
+    
+    # Letzte Ergebnisse für die Auflösungs-Seite zwischenspeichern
+    session['letzte_auswertung'] = {
+        "stadt": session['aktuelle_stadt'],
+        "korrekt": korrektes_feld,
+        "tipps": tipps
+    }
+    
+    # Nächste Stadt für die kommende Runde auswählen
+    session['aktuelle_stadt'] = random.choice(STADT_POOL)
+    
+    return redirect(url_for('aufloesung'))
+
+@app.route('/aufloesung')
+def aufloesung():
+    daten = session.get('letzte_auswertung', {})
+    return render_template('aufloesung.html', daten=daten, scores=session['scores'])
+
+@app.route('/reset')
+def reset():
+    session.clear()
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    app.run(debug=True)
