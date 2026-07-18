@@ -2,3 +2,4 @@ streamlit
 geopandas
 geopy
 pandas
+Flask==3.0.3
