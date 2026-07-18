@@ -22,7 +22,7 @@ def lade_fragen():
 fragen_df = lade_fragen()
 
 KARTEN_DATEN = {
-    "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 55.05), "such_zusatz": ", Germany"},
+    "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 54.91), "such_zusatz": ", Germany"},
     "Baden-Württemberg 🥨": {"bounds": (7.51, 47.53, 10.50, 49.79), "such_zusatz": ", Baden-Wuerttemberg, Germany"},
     "Weltkarte 🗺️": {"bounds": (-180.0, -60.0, 180.0, 85.0), "such_zusatz": ""}
 }
