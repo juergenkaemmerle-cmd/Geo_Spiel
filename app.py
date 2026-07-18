@@ -22,43 +22,34 @@ def lade_fragen():
 
 fragen_df = lade_fragen()
 
-# GPS-Grenzen exakt angepasst an deine Festland-Deutschlandkarte
+# FEIN-KALIBRIERTE GRENZEN FÜR VERTICALES A-T GITTER (West-Ost leicht komprimiert)
 KARTEN_DATEN = {
-    "Deutschland 🇩🇪": {"bounds": (5.86, 47.27, 15.04, 54.91), "such_zusatz": ", Germany"}
+    "Deutschland 🇩🇪": {"bounds": (5.20, 47.27, 15.70, 54.91), "such_zusatz": ", Germany"}
 }
 
 GRID_SIZE = 20
 
-# ACHSEN-TAUSCH LAUT BILD:
 # X-Achse (waagerecht, West-Ost) = Zahlen 1 bis 20
 x_achsen_werte = [str(i) for i in range(1, GRID_SIZE + 1)]
 # Y-Achse (senkrecht, Nord-Süd) = Buchstaben A bis T
 y_achsen_werte = [chr(i) for i in range(ord('A'), ord('A') + GRID_SIZE)]
 
-# Generiert die Liste aller wählbaren Felder im Format "A1", "A2" ... bis "T20"
-# Wichtig: Der Buchstabe steht zuerst, da Spieler es so gewohnt sind ("A1")
 felder_liste = [b+z for b in y_achsen_werte for z in x_achsen_werte]
 
 def get_field_center_gps(feld, karte_name):
     """Berechnet die echten GPS-Koordinaten für den Mittelpunkt eines Kästchens."""
     minx, miny, maxx, maxy = KARTEN_DATEN[karte_name]["bounds"]
     
-    # Feld zerlegen (z.B. "K7" -> 'K' und "7")
     b_char = feld[0].upper()
     z_str = feld[1:]
     
-    # Index auf den Achsen finden
-    y_idx = y_achsen_werte.index(b_char)  # Buchstabe bestimmt die Höhe (Y)
-    x_idx = x_achsen_werte.index(z_str)   # Zahl bestimmt die Breite (X)
+    y_idx = y_achsen_werte.index(b_char)  
+    x_idx = x_achsen_werte.index(z_str)   
     
-    # Schrittweiten pro Kästchen berechnen
     lon_step = (maxx - minx) / GRID_SIZE
     lat_step = (maxy - miny) / GRID_SIZE
     
-    # Mittelpunkt (Index + 0.5)
-    # X (Längengrad) geht von Westen nach Osten
     center_lon = minx + (x_idx + 0.5) * lon_step
-    # Y (Breitengrad) geht von Norden (A) nach Süden (T)
     center_lat = maxy - (y_idx + 0.5) * lat_step  
     
     return center_lon, center_lat
@@ -106,7 +97,6 @@ if "runden_ergebnis" not in st.session_state:
 # --- INTERFACE ---
 st.title("🏆 Geo-Master Quiz-Leiter")
 
-# 1. Kartenauswahl
 gewaehlte_karte = st.selectbox("Welche Karte liegt auf dem Tisch?", list(KARTEN_DATEN.keys()))
 
 if gewaehlte_karte != st.session_state.vorherige_karte:
@@ -116,7 +106,7 @@ if gewaehlte_karte != st.session_state.vorherige_karte:
 
 st.divider()
 
-# 2. Spieler-Setup
+# Spieler-Setup
 anzahl_spieler = st.number_input("Wie viele Spieler?", min_value=1, max_value=6, value=2)
 spieler_namen = []
 cols_spieler = st.columns(min(anzahl_spieler, 3))
@@ -145,7 +135,6 @@ st.divider()
 if st.session_state.aktuelle_frage is None:
     st.session_state.aktuelle_frage = frische_frage_ziehen(gewaehlte_karte)
 
-# 3. Fragen-Steuerung
 if st.button("🔄 Nächste Frage ziehen", type="secondary"):
     st.session_state.aktuelle_frage = frische_frage_ziehen(gewaehlte_karte)
     st.session_state.runden_ergebnis = None
@@ -155,7 +144,7 @@ st.info(f"❓ **DIE QUIZ-FRAGE (Runde {st.session_state.runde + 1}):**\n\n### {s
 
 st.divider()
 
-# 4. Tipps abfragen
+# Tipps abfragen
 st.write("Wählt euer Rasterfeld auf dem gedruckten Brett:")
 tipps = {}
 cols_tipps = st.columns(min(anzahl_spieler, 3))
@@ -164,13 +153,13 @@ for i, name in enumerate(spieler_namen):
         tipp = st.selectbox(f"{name}:", felder_liste, key=f"tipp_{i}", index=0)
         tipps[name] = tipp
 
-# 5. Auswertung
+# Auswertung
 if st.button("Runde auflösen! 🎲", type="primary"):
     if not st.session_state.aktuelle_frage["ziel"]:
         st.error("Kein gültiges Ziel in dieser Frage vorhanden.")
     else:
-        with st.spinner("Orakel wird befragt (Geolokalisierung)..."):
-            geolocator = Nominatim(user_agent="geo_master_quiz_precise_v4")
+        with st.spinner("Orakel wird befragt..."):
+            geolocator = Nominatim(user_agent="geo_master_quiz_precise_v5")
             ziel_ort = st.session_state.aktuelle_frage["ziel"]
             such_string = ziel_ort + KARTEN_DATEN[gewaehlte_karte]["such_zusatz"]
             location = geolocator.geocode(such_string)
@@ -180,15 +169,14 @@ if st.button("Runde auflösen! 🎲", type="primary"):
         else:
             ziel_lon, ziel_lat = location.longitude, location.latitude
             
-            # --- NEUE BERECHNUNG MIT GEDREHTEN ACHSEN ---
             minx, miny, maxx, maxy = KARTEN_DATEN[gewaehlte_karte]["bounds"]
             
-            # 1. Spalte finden (X-Achse, Zahlen 1-20)
+            # 1. Spalte finden (Waagerecht, 1-20)
             pct_x = (ziel_lon - minx) / (maxx - minx)
             corr_x_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_x * GRID_SIZE))))
             korrekte_zahl = x_achsen_werte[corr_x_idx]
             
-            # 2. Zeile finden (Y-Achse, Buchstaben A-T von Nord nach Süd)
+            # 2. Zeile finden (Senkrecht, A-T)
             pct_y = 1.0 - ((ziel_lat - miny) / (maxy - miny))
             corr_y_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_y * GRID_SIZE))))
             korrekter_buchstabe = y_achsen_werte[corr_y_idx]
