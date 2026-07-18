@@ -7,18 +7,21 @@ import math
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- EXTERNEN FRAGENKATALOG AUS CSV LADEN ---
-@st.cache_data
+# --- FRAGENKATALOG DIREKT UND FRISCH LADEN (OHNE CACHE) ---
 def lade_fragen():
     try:
         df = pd.read_csv("fragen.csv", sep=";")
-        # Wichtig: Entfernt unsichtbare Leerzeichen aus den Spaltennamen
+        # Sicherheitsgurt: Entfernt unsichtbare Leerzeichen aus Spalten und Texten
         df.columns = df.columns.str.strip()
+        for col in df.columns:
+            if df[col].dtype == "object":
+                df[col] = df[col].str.strip()
         return df
     except Exception as e:
         st.error(f"Fehler beim Laden der fragen.csv: {e}")
         return pd.DataFrame(columns=["karte", "frage", "ziel", "info"])
 
+# Die Fragen werden jetzt bei JEDEM App-Start frisch von der Festplatte gelesen
 fragen_df = lade_fragen()
 
 # GPS-Grenzen exakt angepasst an deine Festland-Deutschlandkarte
@@ -54,9 +57,7 @@ def haversine_distance(lon1, lat1, lon2, lat2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-# Hilfsfunktion: Zieht eine frische Frage aus der CSV
 def frische_frage_ziehen(karte_name):
-    # Fix: Wir filtern sowohl nach dem Namen MIT als auch OHNE Emoji, falls deine CSV keine Emojis hat!
     reiner_name = karte_name.split(" ")[0].strip()
     verfuegbare = fragen_df[(fragen_df["karte"] == karte_name) | (fragen_df["karte"] == reiner_name)]
     
@@ -69,7 +70,7 @@ def frische_frage_ziehen(karte_name):
         }
     else:
         return {
-            "frage": f"Keine Fragen für '{karte_name}' oder '{reiner_name}' in der fragen.csv gefunden!",
+            "frage": f"Keine Fragen für '{karte_name}' in der fragen.csv gefunden!",
             "ziel": "",
             "info": "Bitte überprüfe die Spalte 'karte' in deiner CSV-Datei."
         }
@@ -126,7 +127,6 @@ if st.button("Scoreboard zurücksetzen 🔄"):
 
 st.divider()
 
-# Erste Frage laden, falls der State leer ist
 if st.session_state.aktuelle_frage is None:
     st.session_state.aktuelle_frage = frische_frage_ziehen(gewaehlte_karte)
 
@@ -155,17 +155,16 @@ if st.button("Runde auflösen! 🎲", type="primary"):
         st.error("Kein gültiges Ziel in dieser Frage vorhanden.")
     else:
         with st.spinner("Orakel wird befragt (Geolokalisierung)..."):
-            geolocator = Nominatim(user_agent="geo_master_quiz_precise_v2")
+            geolocator = Nominatim(user_agent="geo_master_quiz_precise_v3")
             ziel_ort = st.session_state.aktuelle_frage["ziel"]
             such_string = ziel_ort + KARTEN_DATEN[gewaehlte_karte]["such_zusatz"]
             location = geolocator.geocode(such_string)
         
         if not location:
-            st.error(f"Fehler bei der Ortung. '{ziel_ort}' wurde weltweit nicht gefunden. Evtl. Tippfehler in der CSV?")
+            st.error(f"Fehler bei der Ortung. '{ziel_ort}' wurde nicht gefunden.")
         else:
             ziel_lon, ziel_lat = location.longitude, location.latitude
             
-            # Berechne das exakt korrekte Feld
             minx, miny, maxx, maxy = KARTEN_DATEN[gewaehlte_karte]["bounds"]
             pct_x = (ziel_lon - minx) / (maxx - minx)
             pct_y = 1.0 - ((ziel_lat - miny) / (maxy - miny))
@@ -194,7 +193,6 @@ if st.button("Runde auflösen! 🎲", type="primary"):
                     "punkte_basis": punkte_dieser_runde
                 })
             
-            # Trostpunkt ermitteln
             if abstaende_km:
                 min_distanz = min(abstaende_km.values())
                 for idx, erg in enumerate(ergebnisse):
@@ -213,12 +211,9 @@ if st.button("Runde auflösen! 🎲", type="primary"):
                 "tabelle": pd.DataFrame(ergebnisse).drop(columns=["punkte_basis"])
             }
             
-            # WICHTIG: Bereite direkt die nächste Frage im Hintergrund vor, 
-            # damit beim nächsten Rendern eine neue Frage bereitsteht!
             st.session_state.aktuelle_frage = frische_frage_ziehen(gewaehlte_karte)
             st.rerun()
 
-# Ergebnis anzeigen
 if st.session_state.runden_ergebnis:
     res = st.session_state.runden_ergebnis
     st.success(f"🏁 **Letzte Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
