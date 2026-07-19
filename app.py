@@ -76,27 +76,22 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- NATIVE STREAMLIT COMPONENT FÜR QR-SCANNER ---
-def st_qr_scanner(key):
+# --- VISUELLER SCANNER (ZEIGT DIE ID AN) ---
+def st_visual_qr_scanner(key):
     """
-    Rendert einen HTML5-QR-Scanner, der das Ergebnis über die offizielle
-    Streamlit-Komponenten-API direkt und sicher an Python zurückgibt.
+    Öffnet die Kamera und gibt die ID optisch direkt im Iframe aus.
+    Verhindert zuverlässig jeden API-Crash mit Streamlit.
     """
     html_code = f"""
-    <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
+    <div style="font-family: sans-serif; text-align: center;">
+        <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
+        <div id="result_{key}" style="margin-top: 10px; padding: 10px; background: #e8f5e9; border-radius: 5px; display: none; border: 1px solid #a5d6a7;">
+            <b style="color: #2e7d32;">Erkanntes Ergebnis:</b> <span id="text_{key}" style="font-size: 1.2em; font-weight: bold;">-</span>
+        </div>
+    </div>
     
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
-        // Funktion zur Kommunikation mit Streamlit initialisieren
-        function sendToStreamlit(value) {{
-            if (window.Streamlit) {{
-                window.Streamlit.setComponentValue(value);
-            }} else {{
-                // Fallback, falls die API kurz braucht zum Laden
-                parent.postMessage({{type: "streamlit:setComponentValue", value: value}}, "*");
-            }}
-        }}
-
         function onScanSuccess(decodedText, decodedResult) {{
             let frageId = decodedText;
             if (decodedText.includes("frage_id=")) {{
@@ -106,23 +101,22 @@ def st_qr_scanner(key):
                 }}
             }}
             
-            // Sende den Wert nativ an Python zurück
-            sendToStreamlit(frageId);
-            html5QrcodeScanner.clear();
+            // Zeige die ID visuell für den Nutzer an
+            const resDiv = document.getElementById('result_{key}');
+            const resSpan = document.getElementById('text_{key}');
+            if(resDiv && resSpan) {{
+                resSpan.innerText = frageId;
+                resDiv.style.display = 'block';
+            }}
         }}
 
-        // Streamlit API-Verbindung aufbauen
-        const target = window.Streamlit || parent;
-        if (target) {{
-            const html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader_{key}", {{ fps: 15, qrbox: 250 }}, false
-            );
-            html5QrcodeScanner.render(onScanSuccess);
-        }}
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader_{key}", {{ fps: 15, qrbox: 250 }}, false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
     </script>
     """
-    # Gibt den von setComponentValue gesetzten Wert direkt in Python zurück!
-    return components.html(html_code, height=360, key=f"scanner_comp_{key}")
+    components.html(html_code, height=390)
 
 # --- APP STATE DEFAULT INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -180,15 +174,27 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 📷 Vor dem Start: Optional ersten QR-Code scannen")
+    st.markdown("### 📷 Option A: Frage per ID / QR-Code laden")
     
-    scan_res_setup = st_qr_scanner("setup")
+    col_input, col_btn = st.columns([3, 1])
+    with col_input:
+        manuelle_id_setup = st.text_input("Gescannte Nummer / ID hier eingeben:", key="input_setup_id", placeholder="z.B. 12")
+    with col_btn:
+        st.write("")
+        st.write("")
+        if st.button("Laden 🎯", use_container_width=True):
+            if manuelle_id_setup.strip():
+                zeile = hole_spezifische_frage(manuelle_id_setup)
+                if zeile is not None:
+                    st.session_state.aktuelle_frage = zeile
+                    st.success(f"Frage {manuelle_id_setup} geladen!")
+                else:
+                    st.error("ID nicht gefunden.")
+                    
+    st_visual_qr_scanner("setup")
     
-    if scan_res_setup:
-        zeile = hole_spezifische_frage(scan_res_setup)
-        if zeile is not None:
-            st.session_state.aktuelle_frage = zeile
-            st.success(f"🎯 Frage {scan_res_setup} erfolgreich geladen!")
+    if st.session_state.aktuelle_frage is not None:
+        st.info(f"Aktuell gewählte Frage: {st.session_state.aktuelle_frage['frage']}")
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -249,10 +255,8 @@ elif st.session_state.ansicht == "spiel":
                 for name, tipp in tipps.items():
                     tx, ty = get_field_center_gps(tipp, st.session_state.gewaehlte_karte)
                     distanz = haversine_distance(tx, ty, ziel_lon, ziel_lat)
-                    punkte_dieser_runde = 0
                     if tipp == korrektes_feld:
                         st.session_state.scores[name] += 3
-                        punkte_dieser_runde += 3
                     abstaende_km[name] = distanz
                     ergebnisse.append({
                         "Spieler": name, "Tipp": tipp, "Tipp_Lon": tx, "Tipp_Lat": ty,
@@ -292,7 +296,7 @@ elif st.session_state.ansicht == "spiel":
         if not st.session_state.scan_modus_aktiv:
             c_btn1, c_btn2 = st.columns(2)
             with c_btn1:
-                if st.button("Kamera für nächste Runde öffnen 📷", type="primary", use_container_width=True):
+                if st.button("Nächste Frage via ID/QR laden 📷", type="primary", use_container_width=True):
                     st.session_state.scan_modus_aktiv = True
                     st.rerun()
             with c_btn2:
@@ -303,25 +307,32 @@ elif st.session_state.ansicht == "spiel":
                     st.session_state.scan_modus_aktiv = False
                     st.rerun()
         else:
-            st.subheader("📷 Nächsten QR-Code live einscannen")
+            st.subheader("📷 Nächste Frage einscannen oder eingeben")
+            
+            col_in2, col_btn2 = st.columns([3, 1])
+            with col_in2:
+                manuelle_id_runde = st.text_input("Erkannte ID eingeben / bestätigen:", key=f"input_rd_{st.session_state.runde}")
+            with col_btn2:
+                st.write("")
+                st.write("")
+                if st.button("Bestätigen ✅", use_container_width=True):
+                    if manuelle_id_runde.strip():
+                        zeile = hole_spezifische_frage(manuelle_id_runde)
+                        if zeile is not None:
+                            st.session_state.aktuelle_frage = zeile
+                        else:
+                            st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+                        
+                        st.session_state.runden_ergebnis = None
+                        st.session_state.naechste_frage_bereit = None
+                        st.session_state.scan_modus_aktiv = False
+                        st.rerun()
+            
             if st.button("❌ Abbrechen / Zurück", type="secondary"):
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
                 
-            # Der zurückgegebene Wert kommt absolut verzögerungsfrei direkt aus JavaScript an!
-            scan_res = st_qr_scanner(f"runde_{st.session_state.runde}")
-            
-            if scan_res:
-                zeile = hole_spezifische_frage(scan_res)
-                if zeile is not None:
-                    st.session_state.aktuelle_frage = zeile
-                else:
-                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-                
-                st.session_state.runden_ergebnis = None
-                st.session_state.naechste_frage_bereit = None
-                st.session_state.scan_modus_aktiv = False
-                st.rerun()
+            st_visual_qr_scanner(f"runde_{st.session_state.runde}")
         
         st.divider()
         
