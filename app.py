@@ -76,13 +76,44 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
+# --- CALLBACKS FÜR DEN QR-SCAN ---
+def verarbeite_scan_setup():
+    key = "bridge_setup_scanner"
+    scan_val = st.session_state[key]
+    if scan_val:
+        zeile = hole_spezifische_frage(scan_val)
+        if zeile is not None:
+            st.session_state.aktuelle_frage = zeile
+        st.session_state[key] = ""
+
+def verarbeite_scan_spiel():
+    key = f"bridge_runde_scanner_{st.session_state.runde}"
+    scan_val = st.session_state[key]
+    if scan_val:
+        zeile = hole_spezifische_frage(scan_val)
+        if zeile is not None:
+            st.session_state.aktuelle_frage = zeile
+        else:
+            if st.session_state.naechste_frage_bereit is not None:
+                st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+        
+        st.session_state.runden_ergebnis = None
+        st.session_state.naechste_frage_bereit = None
+        st.session_state.scan_modus_aktiv = False
+        st.session_state[key] = ""
+
 # --- DIE LIVE-SCANNER COMPONENT ---
-def st_qr_scanner(key):
+def st_qr_scanner(key, on_change_callback):
     """
-    Rendert einen HTML5-QR-Scanner. Nutzt ein unsichtbares Textfeld,
-    das über ein echtes HTML-Event getriggert wird, um den Wert sauber an Streamlit zu übergeben.
+    Rendert einen HTML5-QR-Scanner. Nutzt ein unsichtbares Textfeld mit einem
+    on_change-Callback zur sofortigen, sauberen Zustandsänderung in Streamlit.
     """
-    wert = st.text_input("QR-Daten-Bridge", key=f"bridge_{key}", label_visibility="collapsed")
+    st.text_input(
+        "QR-Daten-Bridge", 
+        key=f"bridge_{key}", 
+        label_visibility="collapsed", 
+        on_change=on_change_callback
+    )
     
     html_code = f"""
     <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
@@ -117,7 +148,6 @@ def st_qr_scanner(key):
     </script>
     """
     components.html(html_code, height=360)
-    return wert
 
 # --- APP STATE DEFAULT INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -177,14 +207,10 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 📷 Vor dem Start: Optional ersten QR-Code scannen")
     
-    scan_res_setup = st_qr_scanner("setup_scanner")
-    if scan_res_setup and st.session_state.aktuelle_frage is None:
-        zeile = hole_spezifische_frage(scan_res_setup)
-        if zeile is not None:
-            st.session_state.aktuelle_frage = zeile
-            st.success(f"Frage geladen: {zeile['frage'][:30]}...")
-            # Bridge zurücksetzen für zukünftige Eingaben
-            st.session_state["bridge_setup_scanner"] = ""
+    st_qr_scanner("setup_scanner", verarbeite_scan_setup)
+    
+    if st.session_state.aktuelle_frage is not None:
+        st.success(f"Frage erfolgreich geladen: {st.session_state.aktuelle_frage['frage'][:40]}...")
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -306,22 +332,8 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
                 
-            scan_res = st_qr_scanner(scanner_key)
-            
-            if scan_res:
-                zeile = hole_spezifische_frage(scan_res)
-                if zeile is not None:
-                    st.session_state.aktuelle_frage = zeile
-                else:
-                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-                    
-                # HIER PASSIERT DAS ZURÜCKSETZEN: Das verdeckte Feld für den nächsten Scan leeren
-                st.session_state[f"bridge_{scanner_key}"] = ""
-                
-                st.session_state.runden_ergebnis = None
-                st.session_state.naechste_frage_bereit = None
-                st.session_state.scan_modus_aktiv = False
-                st.rerun()
+            # Übergabe des Callbacks, der sofort reagiert, wenn JS Daten sendet
+            st_qr_scanner(scanner_key, verarbeite_scan_spiel)
         
         st.divider()
         
