@@ -1,9 +1,6 @@
 import streamlit as st
-import streamlit.components.v1 as components
-from geopy.geocoders import Nominatim
-import numpy as np
 import pandas as pd
-import random
+from geopy.geocoders import Nominatim
 import math
 import pydeck as pdk
 
@@ -76,48 +73,6 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- VISUELLER SCANNER (ZEIGT DIE ID AN) ---
-def st_visual_qr_scanner(key):
-    """
-    Öffnet die Kamera und gibt die ID optisch direkt im Iframe aus.
-    Verhindert zuverlässig jeden API-Crash mit Streamlit.
-    """
-    html_code = f"""
-    <div style="font-family: sans-serif; text-align: center;">
-        <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
-        <div id="result_{key}" style="margin-top: 10px; padding: 10px; background: #e8f5e9; border-radius: 5px; display: none; border: 1px solid #a5d6a7;">
-            <b style="color: #2e7d32;">Erkanntes Ergebnis:</b> <span id="text_{key}" style="font-size: 1.2em; font-weight: bold;">-</span>
-        </div>
-    </div>
-    
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <script>
-        function onScanSuccess(decodedText, decodedResult) {{
-            let frageId = decodedText;
-            if (decodedText.includes("frage_id=")) {{
-                const urlParts = decodedText.split("frage_id=");
-                if(urlParts.length > 1) {{
-                    frageId = urlParts[1].split("&")[0];
-                }}
-            }}
-            
-            // Zeige die ID visuell für den Nutzer an
-            const resDiv = document.getElementById('result_{key}');
-            const resSpan = document.getElementById('text_{key}');
-            if(resDiv && resSpan) {{
-                resSpan.innerText = frageId;
-                resDiv.style.display = 'block';
-            }}
-        }}
-
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader_{key}", {{ fps: 15, qrbox: 250 }}, false
-        );
-        html5QrcodeScanner.render(onScanSuccess);
-    </script>
-    """
-    components.html(html_code, height=390)
-
 # --- APP STATE DEFAULT INIT ---
 if "setup_erledigt" not in st.session_state:
     st.session_state.setup_erledigt = False
@@ -135,10 +90,6 @@ if "aktuelle_frage" not in st.session_state:
     st.session_state.aktuelle_frage = None
 if "runden_ergebnis" not in st.session_state:
     st.session_state.runden_ergebnis = None
-if "naechste_frage_bereit" not in st.session_state:
-    st.session_state.naechste_frage_bereit = None
-if "scan_modus_aktiv" not in st.session_state:
-    st.session_state.scan_modus_aktiv = False
 
 # --- HEADER / NAVIGATION ---
 st.title("🏆 Geo-Master Quiz-Leiter")
@@ -174,27 +125,22 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 📷 Option A: Frage per ID / QR-Code laden")
+    st.markdown("### 🔍 Erste Frage festlegen (Optional)")
     
-    col_input, col_btn = st.columns([3, 1])
-    with col_input:
-        manuelle_id_setup = st.text_input("Gescannte Nummer / ID hier eingeben:", key="input_setup_id", placeholder="z.B. 12")
-    with col_btn:
-        st.write("")
-        st.write("")
-        if st.button("Laden 🎯", use_container_width=True):
-            if manuelle_id_setup.strip():
-                zeile = hole_spezifische_frage(manuelle_id_setup)
-                if zeile is not None:
-                    st.session_state.aktuelle_frage = zeile
-                    st.success(f"Frage {manuelle_id_setup} geladen!")
-                else:
-                    st.error("ID nicht gefunden.")
-                    
-    st_visual_qr_scanner("setup")
-    
+    manuelle_id_setup = st.text_input("Spezifische Fragen-ID eingeben (leer lassen für Zufall):", key="input_setup_id", placeholder="z.B. 0, 1, 2...")
+    if manuelle_id_setup.strip():
+        zeile = hole_spezifische_frage(manuelle_id_setup)
+        if zeile is not None:
+            st.session_state.aktuelle_frage = zeile
+            st.success(f"🎯 Frage ID {manuelle_id_setup} vorgemerkt!")
+        else:
+            st.error("Diese ID existiert nicht in der CSV.")
+            st.session_state.aktuelle_frage = None
+    else:
+        st.session_state.aktuelle_frage = None
+            
     if st.session_state.aktuelle_frage is not None:
-        st.info(f"Aktuell gewählte Frage: {st.session_state.aktuelle_frage['frage']}")
+        st.info(f"Vorgemerkte Frage: {st.session_state.aktuelle_frage['frage']}")
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -202,8 +148,11 @@ if not st.session_state.setup_erledigt:
         for name in namen:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
+        
+        # Wenn keine ID gewählt wurde, jetzt eine zufällige ziehen
         if st.session_state.aktuelle_frage is None:
             st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
+            
         st.session_state.setup_erledigt = True
         st.session_state.ansicht = "spiel"
         st.rerun()
@@ -228,7 +177,7 @@ elif st.session_state.ansicht == "spiel":
 
     if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
-            with st.spinner("Orakel ermittelt Koordinaten..."):
+            with st.spinner("Koordinaten werden ermittelt..."):
                 geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
                 such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Germany")
@@ -279,8 +228,6 @@ elif st.session_state.ansicht == "spiel":
                     "info": st.session_state.aktuelle_frage['info'], "feld": korrektes_feld,
                     "tabelle": pd.DataFrame(ergebnisse)
                 }
-                st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
-                st.session_state.scan_modus_aktiv = False
                 st.rerun()
     else:
         res = st.session_state.runden_ergebnis
@@ -292,47 +239,34 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
-        # --- SCAN-STEUERUNG ---
-        if not st.session_state.scan_modus_aktiv:
-            c_btn1, c_btn2 = st.columns(2)
-            with c_btn1:
-                if st.button("Nächste Frage via ID/QR laden 📷", type="primary", use_container_width=True):
-                    st.session_state.scan_modus_aktiv = True
-                    st.rerun()
-            with c_btn2:
-                if st.button("Zufällige nächste Frage ➡️", type="secondary", use_container_width=True):
-                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-                    st.session_state.runden_ergebnis = None
-                    st.session_state.naechste_frage_bereit = None
-                    st.session_state.scan_modus_aktiv = False
-                    st.rerun()
-        else:
-            st.subheader("📷 Nächste Frage einscannen oder eingeben")
-            
-            col_in2, col_btn2 = st.columns([3, 1])
-            with col_in2:
-                manuelle_id_runde = st.text_input("Erkannte ID eingeben / bestätigen:", key=f"input_rd_{st.session_state.runde}")
-            with col_btn2:
-                st.write("")
-                st.write("")
-                if st.button("Bestätigen ✅", use_container_width=True):
-                    if manuelle_id_runde.strip():
-                        zeile = hole_spezifische_frage(manuelle_id_runde)
-                        if zeile is not None:
-                            st.session_state.aktuelle_frage = zeile
-                        else:
-                            st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-                        
+        # --- NATIVE STEUERUNG FÜR DIE NÄCHSTE RUNDE ---
+        st.subheader("➡️ Nächste Runde vorbereiten")
+        
+        col_in, col_btn_id, col_btn_rand = st.columns([2, 1, 1])
+        
+        with col_in:
+            naechste_id = st.text_input("Spezifische Fragen-ID eingeben:", key=f"next_id_rd_{st.session_state.runde}", placeholder="z.B. 14")
+        
+        with col_btn_id:
+            st.write("") # Spacer für optische Ausrichtung zum Textfeld
+            if st.button("Per ID laden 🎯", use_container_width=True):
+                if naechste_id.strip():
+                    zeile = hole_spezifische_frage(naechste_id)
+                    if zeile is not None:
+                        st.session_state.aktuelle_frage = zeile
                         st.session_state.runden_ergebnis = None
-                        st.session_state.naechste_frage_bereit = None
-                        st.session_state.scan_modus_aktiv = False
                         st.rerun()
-            
-            if st.button("❌ Abbrechen / Zurück", type="secondary"):
-                st.session_state.scan_modus_aktiv = False
+                    else:
+                        st.error("ID existiert nicht!")
+                else:
+                    st.warning("Bitte ID eingeben!")
+                    
+        with col_btn_rand:
+            st.write("") # Spacer
+            if st.button("Zufällige Frage 🎲", use_container_width=True, type="secondary"):
+                st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
+                st.session_state.runden_ergebnis = None
                 st.rerun()
-                
-            st_visual_qr_scanner(f"runde_{st.session_state.runde}")
         
         st.divider()
         
@@ -386,5 +320,4 @@ elif st.session_state.ansicht == "score":
         st.session_state.runden_ergebnis = None
         st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
         st.session_state.ansicht = "spiel"
-        st.session_state.scan_modus_aktiv = False
         st.rerun()
