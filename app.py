@@ -106,20 +106,14 @@ if "runden_ergebnis" not in st.session_state:
     st.session_state.runden_ergebnis = None
 if "naechste_frage_bereit" not in st.session_state:
     st.session_state.naechste_frage_bereit = None
-if "letzte_verarbeitete_id" not in st.session_state:
-    st.session_state.letzte_verarbeitete_id = None
 
-# --- WICHTIG: LIVE EXTRACT AUS DER URL ---
+# --- PARSE URL PARAMETER BEIM ERSTEN START ---
 query_params = st.query_params
 url_frage_id = query_params.get("frage_id", None)
-
-# Wenn eine NEUE Frage-ID über die URL reinkommt, laden wir sie sofort
-if url_frage_id and url_frage_id != st.session_state.letzte_verarbeitete_id:
+if url_frage_id and not st.session_state.setup_erledigt and st.session_state.aktuelle_frage is None:
     spezifische = hole_spezifische_frage(url_frage_id)
     if spezifische:
         st.session_state.aktuelle_frage = spezifische
-        st.session_state.letzte_verarbeitete_id = url_frage_id
-        st.session_state.runden_ergebnis = None  # Altes Ergebnis löschen für die neue Runde
 
 # --- HEADER / NAVIGATION VIA BUTTONS ---
 st.title("🏆 Geo-Master Quiz-Leiter")
@@ -155,8 +149,12 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 📷 Manuelle ID Eingabe")
-    scanned_input = st.text_input("Falls kein URL-Scan genutzt wird, ID hier eingeben:", placeholder="Z.B. 12")
+    st.markdown("### 📷 QR-Code über Geräte-Kamera scannen")
+    
+    # Integrierter Foto-Scanner für QR-Codes / IDs via Streamlit nativ
+    cam_input = st.camera_input("Halte den QR-Code in die Kamera (optional)")
+    
+    scanned_input = st.text_input("Oder Fragen-ID manuell eingeben:", placeholder="Z.B. 12")
     
     if st.button("Speichern & Spiel starten 🚀", type="primary"):
         st.session_state.gewaehlte_karte = karte
@@ -165,11 +163,13 @@ if not st.session_state.setup_erledigt:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
+        # Falls manuell eingegeben
         if scanned_input:
             spezifische = hole_spezifische_frage(scanned_input)
             if spezifische:
                 st.session_state.aktuelle_frage = spezifische
         
+        # Falls noch keine Frage via URL oder Input gesetzt wurde, ziehe eine zufällige
         if st.session_state.aktuelle_frage is None:
             st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
             
@@ -349,8 +349,19 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
+        st.markdown("### 🎲 Nächste Runde vorbereiten")
+        naechster_qr = st.text_input("QR-Code / ID für die NÄCHSTE Runde manuell eintippen (sonst zufällig):")
+        
         if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
-            st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+            if naechster_qr:
+                spezifische = hole_spezifische_frage(naechster_qr)
+                if spezifische:
+                    st.session_state.aktuelle_frage = spezifische
+                else:
+                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+            else:
+                st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+                
             st.session_state.runden_ergebnis = None
             st.session_state.naechste_frage_bereit = None
             st.rerun()
