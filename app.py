@@ -82,59 +82,40 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- FUNKTIONIERENDER LIVE-SCANNER MIT ZURÜCKMELDUNG ---
+# --- LIVE-SCANNER COMPONENT ---
 def render_live_scanner(key_id):
-    """
-    Erstellt ein HTML-Iframe mit html5-qrcode.
-    Nutzt ein unsichtbares Streamlit-Inputfeld der Parent-Seite, um den Wert direkt
-    und ohne Klick zu übertragen und einen automatischen Rerun auszulösen.
-    """
     html_code = f"""
     <div id="reader" style="width: 100%; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;"></div>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
         function onScanSuccess(decodedText, decodedResult) {{
             let frageId = decodedText;
-            
-            // Falls eine komplette URL gescannt wurde, filtere die ID heraus
             if (decodedText.includes("frage_id=")) {{
                 const urlParts = decodedText.split("frage_id=");
                 if(urlParts.length > 1) {{
-                    // Nimm alles nach frage_id= bis zum nächsten & oder Ende
                     frageId = urlParts[1].split("&")[0];
                 }}
             }}
             
-            // Finde das versteckte/sichtbare Textfeld im übergeordneten Streamlit-Fenster
-            // Wir suchen nach allen Textareas/Inputs im Streamlit DOM
             const parentInputs = window.parent.document.querySelectorAll('input[type="text"]');
-            
             let gefunden = false;
             for (let input of parentInputs) {{
-                // Wir suchen gezielt das Input-Feld, das für diesen Scanner reserviert ist
                 if (input.placeholder && input.placeholder.includes("{key_id}")) {{
                     input.value = frageId;
-                    
-                    // Simuliere Klick/Enter/Input-Event, damit Streamlit den State übernimmt
                     const event = new Event('input', {{ bubbles: true }});
                     input.dispatchEvent(event);
-                    
                     const enterEvent = new KeyboardEvent('keydown', {{
                         bubbles: true, cancelable: true, key: "Enter", keyCode: 13
                     }});
                     input.dispatchEvent(enterEvent);
-                    
                     gefunden = true;
                     break;
                 }}
             }}
-            
             if(gefunden) {{
-                // Scanner stoppen
                 html5QrcodeScanner.clear();
             }}
         }}
-
         const html5QrcodeScanner = new Html5QrcodeScanner(
             "reader", {{ fps: 15, qrbox: 260 }}, false
         );
@@ -162,6 +143,8 @@ if "runden_ergebnis" not in st.session_state:
     st.session_state.runden_ergebnis = None
 if "naechste_frage_bereit" not in st.session_state:
     st.session_state.naechste_frage_bereit = None
+if "scan_modus_aktiv" not in st.session_state:
+    st.session_state.scan_modus_aktiv = False
 
 # --- HEADER / NAVIGATION ---
 st.title("🏆 Geo-Master Quiz-Leiter")
@@ -199,11 +182,9 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 📷 Live QR-Code Scanner (Automatischer Start)")
     
-    # Textfeld, in das JavaScript die ID direkt reinschreibt
     placeholder_id = "SCANNER_TARGET_SETUP"
     scanned_input = st.text_input("Gescannte ID / Manuelle Eingabe:", placeholder=placeholder_id, key="setup_manual_input")
     
-    # Sobald das Feld durch JavaScript befüllt wird, triggert Python sofort das Spiel!
     if scanned_input:
         st.session_state.gewaehlte_karte = karte
         st.session_state.spieler_namen = namen
@@ -221,7 +202,6 @@ if not st.session_state.setup_erledigt:
         st.session_state.ansicht = "spiel"
         st.rerun()
 
-    # Kamera wird gerendert
     render_live_scanner(placeholder_id)
     
     if st.button("Ohne QR-Code starten (Zufallsfrage) 🚀", type="primary"):
@@ -325,6 +305,7 @@ elif st.session_state.ansicht == "spiel":
                     "tabelle": pd.DataFrame(ergebnisse)
                 }
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
+                st.session_state.scan_modus_aktiv = False # Initial geschlossen
                 st.rerun()
     else:
         res = st.session_state.runden_ergebnis
@@ -336,33 +317,43 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
-        # --- HIER: AUTOMATISCHER LIVE SCANNER VOR DER GRAPHISCHEN AUFLÖSUNG ---
-        st.subheader("📷 Nächsten QR-Code live vor die Kamera halten")
-        
-        placeholder_runde_id = f"SCANNER_TARGET_RUNDE_{st.session_state.runde}"
-        naechster_input = st.text_input("Erfasste ID / Manuelle Eingabe:", placeholder=placeholder_runde_id, key=f"runde_manual_input_{st.session_state.runde}")
-        
-        # Sobald JavaScript den QR-Code erfasst, wird diese Bedingung wahr und schaltet SOFORT weiter
-        if naechster_input:
-            zeile = hole_spezifische_frage(naechster_input)
-            if zeile is not None:
-                st.session_state.aktuelle_frage = zeile
-            else:
-                st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+        # --- BLOCK FÜR NÄCHSTE RUNDE (GESTEUERT ÜBER BUTTON) ---
+        if not st.session_state.scan_modus_aktiv:
+            c_btn1, c_btn2 = st.columns(2)
+            with c_btn1:
+                if st.button("Kamera für nächste Runde öffnen 📷", type="primary", use_container_width=True):
+                    st.session_state.scan_modus_aktiv = True
+                    st.rerun()
+            with c_btn2:
+                if st.button("Zufällige nächste Frage ➡️", type="secondary", use_container_width=True):
+                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+                    st.session_state.runden_ergebnis = None
+                    st.session_state.naechste_frage_bereit = None
+                    st.session_state.scan_modus_aktiv = False
+                    st.rerun()
+        else:
+            st.subheader("📷 Nächsten QR-Code live einscannen")
+            if st.button("❌ Abbrechen / Zurück", type="secondary"):
+                st.session_state.scan_modus_aktiv = False
+                st.rerun()
                 
-            st.session_state.runden_ergebnis = None
-            st.session_state.naechste_frage_bereit = None
-            st.rerun()
+            placeholder_runde_id = f"SCANNER_TARGET_RUNDE_{st.session_state.runde}"
+            naechster_input = st.text_input("Erfasste ID:", placeholder=placeholder_runde_id, key=f"runde_manual_input_{st.session_state.runde}")
+            
+            if naechster_input:
+                zeile = hole_spezifische_frage(naechster_input)
+                if zeile is not None:
+                    st.session_state.aktuelle_frage = zeile
+                else:
+                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+                    
+                st.session_state.runden_ergebnis = None
+                st.session_state.naechste_frage_bereit = None
+                st.session_state.scan_modus_aktiv = False
+                st.rerun()
 
-        # Kamera rendern
-        render_live_scanner(placeholder_runde_id)
+            render_live_scanner(placeholder_runde_id)
         
-        if st.button("Überspringen & Zufällige nächste Frage ➡️", type="secondary", use_container_width=True):
-            st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-            st.session_state.runden_ergebnis = None
-            st.session_state.naechste_frage_bereit = None
-            st.rerun()
-
         st.divider()
         
         # --- DIE MAP GANZ UNTEN ---
@@ -454,4 +445,5 @@ elif st.session_state.ansicht == "score":
         st.session_state.runden_ergebnis = None
         st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
         st.session_state.ansicht = "spiel"
+        st.session_state.scan_modus_aktiv = False
         st.rerun()
