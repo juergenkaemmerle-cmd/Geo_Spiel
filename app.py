@@ -155,12 +155,18 @@ elif st.session_state.ansicht == "spiel":
             tipp_key = f"tipp_{st.session_state.runde}_{i}"
             tipps[name] = st.selectbox(f"{name}:", felder_liste, key=tipp_key, disabled=ist_aufgeloest)
 
-    if not ist_aufgeloest:
+            if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
             with st.spinner("Orakel ermittelt Koordinaten..."):
                 geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
-                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_suzatz"] if "such_zusatz" in KARTEN_DATEN[st.session_state.gewaehlte_karte] else ziel_ort + ", Germany"
+                
+                # HIER WAR DER TIPPFEHLER – JETZT KORRIGIERT:
+                if "such_zusatz" in KARTEN_DATEN[st.session_state.gewaehlte_karte]:
+                    such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_zusatz"]
+                else:
+                    such_string = ziel_ort + ", Germany"
+                    
                 location = geolocator.geocode(such_string)
             
             if not location:
