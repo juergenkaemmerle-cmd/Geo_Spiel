@@ -76,47 +76,18 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- CALLBACKS FÜR DEN QR-SCAN ---
-def verarbeite_scan_setup():
-    key = "bridge_setup_scanner"
-    scan_val = st.session_state[key]
-    if scan_val:
-        zeile = hole_spezifische_frage(scan_val)
-        if zeile is not None:
-            st.session_state.aktuelle_frage = zeile
-        st.session_state[key] = ""
-
-def verarbeite_scan_spiel():
-    key = f"bridge_runde_scanner_{st.session_state.runde}"
-    scan_val = st.session_state[key]
-    if scan_val:
-        zeile = hole_spezifische_frage(scan_val)
-        if zeile is not None:
-            st.session_state.aktuelle_frage = zeile
-        else:
-            if st.session_state.naechste_frage_bereit is not None:
-                st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-        
-        st.session_state.runden_ergebnis = None
-        st.session_state.naechste_frage_bereit = None
-        st.session_state.scan_modus_aktiv = False
-        st.session_state[key] = ""
-
-# --- DIE LIVE-SCANNER COMPONENT ---
-def st_qr_scanner(key, on_change_callback):
+# --- DAS ECHTE HTML-FORMULAR MIT INTEGRIERTEM QR-SCANNER ---
+def st_qr_scanner(key):
     """
-    Rendert einen HTML5-QR-Scanner. Nutzt ein unsichtbares Textfeld mit einem
-    on_change-Callback zur sofortigen, sauberen Zustandsänderung in Streamlit.
+    Rendert ein eigenständiges HTML-Formular. Der Scanner füllt das Feld aus
+    und schickt das Formular ab. Das lädt die Seite neu und übergibt die ID 
+    zuverlässig per Standard-GET-Request an das Hauptfenster.
     """
-    st.text_input(
-        "QR-Daten-Bridge", 
-        key=f"bridge_{key}", 
-        label_visibility="collapsed", 
-        on_change=on_change_callback
-    )
-    
     html_code = f"""
-    <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
+    <form action="" method="get" target="_parent" id="qr_form_{key}">
+        <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;"></div>
+        <input type="hidden" name="scanned_id" id="scanned_id_{key}" value="">
+    </form>
     
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
@@ -129,15 +100,11 @@ def st_qr_scanner(key, on_change_callback):
                 }}
             }}
             
-            const inputs = window.parent.document.querySelectorAll('input');
-            for (let input of inputs) {{
-                if (input.id && input.id.includes("bridge_{key}")) {{
-                    input.value = frageId;
-                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    break;
-                }}
-            }}
+            // Wert in das versteckte Formularfeld eintragen
+            document.getElementById('scanned_id_{key}').value = frageId;
+            // Das Formular sauber abschicken (schließt die Kamera und meldet an Eltern-Fenster)
+            document.getElementById('qr_form_{key}').submit();
+            
             html5QrcodeScanner.clear();
         }}
 
@@ -147,7 +114,7 @@ def st_qr_scanner(key, on_change_callback):
         html5QrcodeScanner.render(onScanSuccess);
     </script>
     """
-    components.html(html_code, height=360)
+    components.html(html_code, height=380)
 
 # --- APP STATE DEFAULT INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -170,6 +137,20 @@ if "naechste_frage_bereit" not in st.session_state:
     st.session_state.naechste_frage_bereit = None
 if "scan_modus_aktiv" not in st.session_state:
     st.session_state.scan_modus_aktiv = False
+
+# --- EINGEHENDE FORMULAR-DATA HIER ABFANGEN ---
+if "scanned_id" in st.query_params:
+    scan_val = st.query_params["scanned_id"]
+    # Direkt löschen, um Endlosschleifen beim manuellen Neuladen zu verhindern
+    del st.query_params["scanned_id"]
+    
+    zeile = hole_spezifische_frage(scan_val)
+    if zeile is not None:
+        st.session_state.aktuelle_frage = zeile
+        st.session_state.runden_ergebnis = None
+        st.session_state.naechste_frage_bereit = None
+        st.session_state.scan_modus_aktiv = False
+        st.toast(f"🎯 Frage {scan_val} geladen!", icon="✅")
 
 # --- HEADER / NAVIGATION ---
 st.title("🏆 Geo-Master Quiz-Leiter")
@@ -207,10 +188,10 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 📷 Vor dem Start: Optional ersten QR-Code scannen")
     
-    st_qr_scanner("setup_scanner", verarbeite_scan_setup)
+    st_qr_scanner("setup_scanner")
     
     if st.session_state.aktuelle_frage is not None:
-        st.success(f"Frage erfolgreich geladen: {st.session_state.aktuelle_frage['frage'][:40]}...")
+        st.success(f"Aktuell geladene Frage: {st.session_state.aktuelle_frage['frage']}")
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -311,8 +292,6 @@ elif st.session_state.ansicht == "spiel":
         st.divider()
         
         # --- KLAR GESTEUERTER SCAN-ABLAUF ---
-        scanner_key = f"runde_scanner_{st.session_state.runde}"
-        
         if not st.session_state.scan_modus_aktiv:
             c_btn1, c_btn2 = st.columns(2)
             with c_btn1:
@@ -332,8 +311,7 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
                 
-            # Übergabe des Callbacks, der sofort reagiert, wenn JS Daten sendet
-            st_qr_scanner(scanner_key, verarbeite_scan_spiel)
+            st_qr_scanner(f"runde_{st.session_state.runde}")
         
         st.divider()
         
