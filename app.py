@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import random
 import math
+import pydeck as pdk  # Für die grafische Kartendarstellung
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
@@ -75,7 +76,7 @@ def frische_frage_ziehen(karte_name):
 if "setup_erledigt" not in st.session_state:
     st.session_state.setup_erledigt = False
 if "ansicht" not in st.session_state:
-    st.session_state.ansicht = "spiel" # Optionen: "spiel", "score"
+    st.session_state.ansicht = "spiel"
 if "gewaehlte_karte" not in st.session_state:
     st.session_state.gewaehlte_karte = "Deutschland 🇩🇪"
 if "spieler_namen" not in st.session_state:
@@ -94,7 +95,6 @@ if "naechste_frage_bereit" not in st.session_state:
 # --- HEADER / NAVIGATION VIA BUTTONS ---
 st.title("🏆 Geo-Master Quiz-Leiter")
 
-# Navigations-Leiste (Wird nur nach Setup angezeigt)
 if st.session_state.setup_erledigt:
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
@@ -128,12 +128,10 @@ if not st.session_state.setup_erledigt:
     if st.button("Speichern & Spiel starten 🚀", type="primary"):
         st.session_state.gewaehlte_karte = karte
         st.session_state.spieler_namen = namen
-        # Bestehende Scores behalten, falls Namen gleich bleiben, sonst neu anlegen
         for name in namen:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        # Erste Frage ziehen
         st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
         st.session_state.setup_erledigt = True
         st.session_state.ansicht = "spiel"
@@ -144,29 +142,25 @@ elif st.session_state.ansicht == "spiel":
     if st.session_state.aktuelle_frage is None:
         st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
 
-    # Prüfen, ob eine Runde gerade frisch aufgelöst wurde
     ist_aufgeloest = st.session_state.runden_ergebnis is not None
 
     st.info(f"❓ **DIE QUIZ-FRAGE (Runde {st.session_state.runde + 1}):**\n\n### {st.session_state.aktuelle_frage['frage']}")
     st.divider()
 
-    # Tipps abfragen (Deaktiviert, wenn bereits aufgelöst wurde)
     st.write("Wählt euer Rasterfeld auf dem gedruckten Brett:")
     tipps = {}
     cols_tipps = st.columns(min(len(st.session_state.spieler_namen), 3))
     for i, name in enumerate(st.session_state.spieler_namen):
         with cols_tipps[i % 3]:
-            # Falls aufgelöst, zeigen wir den getippten Wert fixiert an
             tipp_key = f"tipp_{st.session_state.runde}_{i}"
             tipps[name] = st.selectbox(f"{name}:", felder_liste, key=tipp_key, disabled=ist_aufgeloest)
 
-    # Button-Bereich wechseln je nach Runden-Zustand
     if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
             with st.spinner("Orakel ermittelt Koordinaten..."):
                 geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
-                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_zusatz"]
+                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_suzatz"] if "such_zusatz" in KARTEN_DATEN[st.session_state.gewaehlte_karte] else ziel_ort + ", Germany"
                 location = geolocator.geocode(such_string)
             
             if not location:
@@ -200,7 +194,9 @@ elif st.session_state.ansicht == "spiel":
                     abstaende_km[name] = distanz
                     ergebnisse.append({
                         "Spieler": name, 
-                        "Tipp": tipp, 
+                        "Tipp": tipp,
+                        "Tipp_Lon": tx,
+                        "Tipp_Lat": ty,
                         "Abstand (km)": round(distanz, 1), 
                         "Volltreffer": "🎉 Ja (+3 Pkt)" if tipp == korrektes_feld else "Nein",
                         "Punkte": punkte_dieser_runde
@@ -219,29 +215,98 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.runde += 1
                 st.session_state.runden_ergebnis = {
                     "ziel": ziel_ort.upper(),
+                    "ziel_lon": ziel_lon,
+                    "ziel_lat": ziel_lat,
                     "info": st.session_state.aktuelle_frage['info'],
                     "feld": korrektes_feld,
                     "tabelle": pd.DataFrame(ergebnisse)
                 }
-                # Bereite die nächste Frage schon vor
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
                 st.rerun()
     else:
-        # HIER ERFOLGT DIE GRAFISCHE DARSTELLUNG & ERGEBNISANZEIGE
+        # --- HIER ERFOLGT DIE NEUE INTERAKTIVE KARTEN-DARSTELLUNG ---
         res = st.session_state.runden_ergebnis
         st.success(f"🏁 **Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
         st.caption(f"💡 *Hintergrund-Info: {res['info']}*")
         
-        st.subheader("📊 Grafische Auswertung (Distanz zum Ziel in km):")
-        # Diagramm-Daten aufbereiten
-        chart_data = res["tabelle"][["Spieler", "Abstand (km)"]].set_index("Spieler")
-        st.bar_chart(chart_data, y="Abstand (km)", color="#ff4b4b")
+        st.subheader("🗺️ Grafische Kartenauswertung:")
+        
+        # 1. Daten für die Kartenelemente bauen
+        df_tipps = res["tabelle"].copy()
+        df_tipps["Ziel_Lon"] = res["ziel_lon"]
+        df_tipps["Ziel_Lat"] = res["ziel_lat"]
+        
+        df_ziel = pd.DataFrame([{
+            "lon": res["ziel_lon"],
+            "lat": res["ziel_lat"],
+            "name": res["ziel"]
+        }])
+        
+        # 2. Pydeck Layer definieren
+        # Layer für Verbindungslinien (Tipp -> Ziel)
+        line_layer = pdk.Layer(
+            "LineLayer",
+            data=df_tipps,
+            get_source_position="[Tipp_Lon, Tipp_Lat]",
+            get_target_position="[Ziel_Lon, Ziel_Lat]",
+            get_color="[235, 94, 40, 200]", # Dynamisches Orange-Rot
+            get_width=4,
+            pickable=True
+        )
+        
+        # Layer für die Spieler-Tipps (Rote Punkte)
+        tipp_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df_tipps,
+            get_position="[Tipp_Lon, Tipp_Lat]",
+            get_color="[255, 75, 75]", # Rot
+            get_radius=15000, # Radius in Metern
+            pickable=True,
+            auto_highlight=True
+        )
+        
+        # Layer für das exakte Ergebnis (Grüner Punkt)
+        ziel_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df_ziel,
+            get_position="[lon, lat]",
+            get_color="[46, 196, 182]", # Leuchtendes Mintgrün
+            get_radius=22000,
+            pickable=True
+        )
+
+        # Text-Labels für Spielernamen direkt auf der Karte
+        label_layer = pdk.Layer(
+            "TextLayer",
+            data=df_tipps,
+            get_position="[Tipp_Lon, Tipp_Lat]",
+            get_text="Spieler",
+            get_size=16,
+            get_color="[255, 255, 255]",
+            get_alignment_baseline="'bottom'",
+            background_color="[0, 0, 0, 160]"
+        )
+        
+        # Kartenansicht zentrieren (Mitte von Deutschland)
+        view_state = pdk.ViewState(
+            longitude=10.45,
+            latitude=51.16,
+            zoom=5.2,
+            pitch=0
+        )
+        
+        # Karte anzeigen (Nutzt ein sauberes, klares OpenStreetMap-Design ohne ablenkende 3D-Bauten)
+        st.pydeck_chart(pdk.Deck(
+            layers=[line_layer, tipp_layer, ziel_layer, label_layer],
+            initial_view_state=view_state,
+            map_style="mapbox://styles/mapbox/light-v10", # Heller, übersichtlicher Stil
+            tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
+        ))
         
         st.subheader("📈 Runden-Details:")
-        st.table(res["tabelle"].set_index("Spieler").drop(columns=["Punkte"]))
+        st.table(res["tabelle"].set_index("Spieler").drop(columns=["Punkte", "Tipp_Lon", "Tipp_Lat"]))
         
         if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
-            # Nächste Frage reinladen, Runden-Ergebnis löschen
             st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
             st.session_state.runden_ergebnis = None
             st.session_state.naechste_frage_bereit = None
@@ -250,16 +315,12 @@ elif st.session_state.ansicht == "spiel":
 # --- ANSICHT 2: GLOBALER PUNKTESTAND ---
 elif st.session_state.ansicht == "score":
     st.subheader("📊 Globaler Punktestand (Aktuelles Spiel)")
-    
     score_data = [{"Spieler": k, "Gesamtpunkte": v} for k, v in st.session_state.scores.items() if k in st.session_state.spieler_namen]
     df_score = pd.DataFrame(score_data)
     
     if not df_score.empty:
-        # Rangliste sortieren
         df_score = df_score.sort_values(by="Gesamtpunkte", ascending=False).reset_index(drop=True)
         st.dataframe(df_score.set_index("Spieler"), use_container_width=True)
-        
-        # Schickes Leaderboard-Diagramm
         st.bar_chart(df_score.set_index("Spieler"), y="Gesamtpunkte", color="#4bd6ff")
     else:
         st.info("Noch keine Punkte vergeben.")
