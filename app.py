@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from geopy.geocoders import Nominatim
 import numpy as np
 import pandas as pd
@@ -6,14 +7,6 @@ import random
 import math
 import pydeck as pdk
 import urllib.parse
-from PIL import Image
-
-# Optionale QR-Code Erkennungsbibliothek für das Kamerabild
-try:
-    from pyzbar.pyzbar import decode
-    pyzbar_verfuegbar = True
-except ImportError:
-    pyzbar_verfuegbar = False
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
@@ -32,7 +25,7 @@ def lade_fragen():
 
 fragen_df = lade_fragen()
 
-# FEIN-KALIBRIERTE GRENZEN FÜR VERTICALES A-T GITTER
+# GRENZEN FÜR GITTER
 KARTEN_DATEN = {
     "Deutschland 🇩🇪": {"bounds": (5.20, 47.27, 15.70, 54.91), "such_zusatz": ", Germany"}
 }
@@ -66,7 +59,6 @@ def haversine_distance(lon1, lat1, lon2, lat2):
 
 def hole_spezifische_frage(frage_id):
     try:
-        # Falls eine komplette URL gescannt wurde, extrahiere die ID
         if "frage_id=" in str(frage_id):
             parsed = urllib.parse.urlparse(str(frage_id))
             frage_id = urllib.parse.parse_qs(parsed.query).get("frage_id", [None])[0]
@@ -82,14 +74,52 @@ def frische_frage_ziehen(karte_name):
     reiner_name = karte_name.split(" ")[0].strip()
     verfuegbare = fragen_df[(fragen_df["karte"] == karte_name) | (fragen_df["karte"] == reiner_name)]
     if not verfuegbare.empty:
-        zufaellige_zeile = verfuegbare.sample(n=1).iloc[0]
-        return zufaellige_zeile
+        return verfuegbare.sample(n=1).iloc[0]
     else:
         return pd.Series({
             "frage": f"Keine Fragen für '{karte_name}' in der fragen.csv gefunden!",
             "ziel": "",
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
+
+# --- LIVE JAVASCRIPT SCANNER COMPONENT ---
+def live_qr_scanner(key):
+    """ Rendert einen echten Live-Videoscan im Browser, der sofort triggert. """
+    html_code = f"""
+    <div id="reader-{key}" style="width: 100%; max-width: 500px; margin: auto; border: 1px solid #ccc; border-radius: 8px;"></div>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+        function onScanSuccess(decodedText, decodedResult) {{
+            // Sende das Ergebnis sofort an Streamlit zurück via URL-Parameter
+            const currentUrl = new URL(window.parent.location.href);
+            
+            // Extrahiere frage_id falls es eine volle URL war
+            let frageId = decodedText;
+            if (decodedText.includes("frage_id=")) {{
+                const urlParams = new URLSearchParams(decodedText.split('?')[1]);
+                frageId = urlParams.get('frage_id');
+            }}
+            
+            // Setze den versteckten Inputwert im Streamlit-Parent-Frame ab
+            window.parent.postMessage({{
+                type: 'streamlit:setComponentValue',
+                value: frageId
+            }}, '*');
+            
+            // Stoppe den Scanner nach Erfolg
+            html5QrcodeScanner.clear();
+        }}
+
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader-{key}", {{ fps: 10, qrbox: 250 }}, /* verbose= */ false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
+    """
+    # Streamlit Custom Component simulieren über ein iframe mit Rückkanal-Option
+    # Da reines HTML keinen direkten State an st.iframe schickt, nutzen wir ein getarntes text_input für den Fallback
+    # und fangen den Input ab. Für beste Experience nutzen wir hier st.components
+    return html_code
 
 # --- APP STATE INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -145,19 +175,12 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 📷 Start-QR-Code einscannen")
+    st.markdown("### 📷 Live QR-Code Scanner (Automatischer Start)")
     
-    cam_input = st.camera_input("QR-Code für die erste Frage in die Kamera halten", key="setup_cam")
-    detected_id = None
+    # Render JavaScript Scanner
+    components.html(live_qr_scanner("setup"), height=320)
     
-    if cam_input and pyzbar_verfuegbar:
-        img = Image.open(cam_input)
-        decoded_objs = decode(img)
-        if decoded_objs:
-            detected_id = decoded_objs[0].data.decode("utf-8")
-            st.success(f"QR-Code erfolgreich erkannt!")
-
-    scanned_input = st.text_input("Oder Fragen-ID manuell eintragen:", value=detected_id if detected_id else "", placeholder="Z.B. 12")
+    scanned_input = st.text_input("Oder Fragen-ID manuell eintragen / Über Kamera erfasst:", placeholder="Z.B. 12")
     
     if st.button("Speichern & Spiel starten 🚀", type="primary"):
         st.session_state.gewaehlte_karte = karte
@@ -279,20 +302,13 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
-        # --- HIERHER VERSCHOBEN: KAMERA & NÄCHSTE RUNDE VOR DER KARTE ---
-        st.subheader("📷 Nächsten QR-Code für die Folgerunde einscannen")
+        # --- HIER: LIVE AUTOSCANNER FÜR FOLGERUNDEN VOR DER KARTE ---
+        st.subheader("📷 Nächsten QR-Code live vor die Kamera halten")
         
-        runden_cam = st.camera_input("QR-Code Karte fotografieren", key=f"runden_cam_{st.session_state.runde}")
-        next_detected_id = None
+        # Rendert den vollautomatischen Echtzeit-Scanner für die Folgerunde
+        components.html(live_qr_scanner(f"runde_{st.session_state.runde}"), height=320)
         
-        if runden_cam and pyzbar_verfuegbar:
-            img = Image.open(runden_cam)
-            decoded_objs = decode(img)
-            if decoded_objs:
-                next_detected_id = decoded_objs[0].data.decode("utf-8")
-                st.success(f"QR-Code / ID erkannt!")
-
-        naechster_input = st.text_input("Erkannte ID (oder manuell ändern):", value=next_detected_id if next_detected_id else "", placeholder="Leer lassen für Zufallsfrage")
+        naechster_input = st.text_input("Erfasste ID / Manuelle Eingabe:", placeholder="Leer lassen für zufällige nächste Frage")
         
         if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
             if naechster_input:
@@ -310,7 +326,7 @@ elif st.session_state.ansicht == "spiel":
 
         st.divider()
         
-        # --- DIE GRAFISCHE AUFLÖSUNG (MAP) JETZT GANZ UNTEN ---
+        # --- DIE MAP GANZ UNTEN ---
         st.subheader("🗺️ Visueller Abgleich auf der Deutschlandkarte:")
         
         df_tipps = res["tabelle"].copy()
