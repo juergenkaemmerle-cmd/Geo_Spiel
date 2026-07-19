@@ -6,6 +6,14 @@ import random
 import math
 import pydeck as pdk
 import urllib.parse
+from PIL import Image
+
+# Optionale QR-Code Erkennungsbibliothek für das Kamerabild
+try:
+    from pyzbar.pyzbar import decode
+    pyzbar_verfuegbar = True
+except ImportError:
+    pyzbar_verfuegbar = False
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
@@ -58,15 +66,15 @@ def haversine_distance(lon1, lat1, lon2, lat2):
 
 def hole_spezifische_frage(frage_id):
     try:
-        idx = int(frage_id)
+        # Falls eine komplette URL gescannt wurde, extrahiere die ID
+        if "frage_id=" in str(frage_id):
+            parsed = urllib.parse.urlparse(str(frage_id))
+            frage_id = urllib.parse.parse_qs(parsed.query).get("frage_id", [None])[0]
+        
+        idx = int(str(frage_id).strip())
         if 0 <= idx < len(fragen_df):
-            zeile = fragen_df.iloc[idx]
-            return {
-                "frage": zeile["frage"],
-                "ziel": zeile["ziel"],
-                "info": zeile["info"]
-            }
-    except ValueError:
+            return fragen_df.iloc[idx]
+    except Exception:
         pass
     return None
 
@@ -75,17 +83,13 @@ def frische_frage_ziehen(karte_name):
     verfuegbare = fragen_df[(fragen_df["karte"] == karte_name) | (fragen_df["karte"] == reiner_name)]
     if not verfuegbare.empty:
         zufaellige_zeile = verfuegbare.sample(n=1).iloc[0]
-        return {
-            "frage": zufaellige_zeile["frage"],
-            "ziel": zufaellige_zeile["ziel"],
-            "info": zufaellige_zeile["info"]
-        }
+        return zufaellige_zeile
     else:
-        return {
+        return pd.Series({
             "frage": f"Keine Fragen für '{karte_name}' in der fragen.csv gefunden!",
             "ziel": "",
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
-        }
+        })
 
 # --- APP STATE INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -106,14 +110,6 @@ if "runden_ergebnis" not in st.session_state:
     st.session_state.runden_ergebnis = None
 if "naechste_frage_bereit" not in st.session_state:
     st.session_state.naechste_frage_bereit = None
-
-# --- PARSE URL PARAMETER BEIM ERSTEN START ---
-query_params = st.query_params
-url_frage_id = query_params.get("frage_id", None)
-if url_frage_id and not st.session_state.setup_erledigt and st.session_state.aktuelle_frage is None:
-    spezifische = hole_spezifische_frage(url_frage_id)
-    if spezifische:
-        st.session_state.aktuelle_frage = spezifische
 
 # --- HEADER / NAVIGATION VIA BUTTONS ---
 st.title("🏆 Geo-Master Quiz-Leiter")
@@ -149,12 +145,19 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 📷 QR-Code über Geräte-Kamera scannen")
+    st.markdown("### 📷 Start-QR-Code einscannen")
     
-    # Integrierter Foto-Scanner für QR-Codes / IDs via Streamlit nativ
-    cam_input = st.camera_input("Halte den QR-Code in die Kamera (optional)")
+    cam_input = st.camera_input("QR-Code für die erste Frage in die Kamera halten", key="setup_cam")
+    detected_id = None
     
-    scanned_input = st.text_input("Oder Fragen-ID manuell eingeben:", placeholder="Z.B. 12")
+    if cam_input and pyzbar_verfuegbar:
+        img = Image.open(cam_input)
+        decoded_objs = decode(img)
+        if decoded_objs:
+            detected_id = decoded_objs[0].data.decode("utf-8")
+            st.success(f"QR-Code erfolgreich erkannt!")
+
+    scanned_input = st.text_input("Oder Fragen-ID manuell eintragen:", value=detected_id if detected_id else "", placeholder="Z.B. 12")
     
     if st.button("Speichern & Spiel starten 🚀", type="primary"):
         st.session_state.gewaehlte_karte = karte
@@ -163,13 +166,11 @@ if not st.session_state.setup_erledigt:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        # Falls manuell eingegeben
         if scanned_input:
-            spezifische = hole_spezifische_frage(scanned_input)
-            if spezifische:
-                st.session_state.aktuelle_frage = spezifische
+            zeile = hole_spezifische_frage(scanned_input)
+            if zeile is not None:
+                st.session_state.aktuelle_frage = zeile
         
-        # Falls noch keine Frage via URL oder Input gesetzt wurde, ziehe eine zufällige
         if st.session_state.aktuelle_frage is None:
             st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
             
@@ -278,6 +279,38 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
+        # --- HIERHER VERSCHOBEN: KAMERA & NÄCHSTE RUNDE VOR DER KARTE ---
+        st.subheader("📷 Nächsten QR-Code für die Folgerunde einscannen")
+        
+        runden_cam = st.camera_input("QR-Code Karte fotografieren", key=f"runden_cam_{st.session_state.runde}")
+        next_detected_id = None
+        
+        if runden_cam and pyzbar_verfuegbar:
+            img = Image.open(runden_cam)
+            decoded_objs = decode(img)
+            if decoded_objs:
+                next_detected_id = decoded_objs[0].data.decode("utf-8")
+                st.success(f"QR-Code / ID erkannt!")
+
+        naechster_input = st.text_input("Erkannte ID (oder manuell ändern):", value=next_detected_id if next_detected_id else "", placeholder="Leer lassen für Zufallsfrage")
+        
+        if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
+            if naechster_input:
+                zeile = hole_spezifische_frage(naechster_input)
+                if zeile is not None:
+                    st.session_state.aktuelle_frage = zeile
+                else:
+                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+            else:
+                st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+                
+            st.session_state.runden_ergebnis = None
+            st.session_state.naechste_frage_bereit = None
+            st.rerun()
+
+        st.divider()
+        
+        # --- DIE GRAFISCHE AUFLÖSUNG (MAP) JETZT GANZ UNTEN ---
         st.subheader("🗺️ Visueller Abgleich auf der Deutschlandkarte:")
         
         df_tipps = res["tabelle"].copy()
@@ -346,25 +379,6 @@ elif st.session_state.ansicht == "spiel":
             map_style=None, 
             tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
         ))
-        
-        st.divider()
-        
-        st.markdown("### 🎲 Nächste Runde vorbereiten")
-        naechster_qr = st.text_input("QR-Code / ID für die NÄCHSTE Runde manuell eintippen (sonst zufällig):")
-        
-        if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
-            if naechster_qr:
-                spezifische = hole_spezifische_frage(naechster_qr)
-                if spezifische:
-                    st.session_state.aktuelle_frage = spezifische
-                else:
-                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-            else:
-                st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
-                
-            st.session_state.runden_ergebnis = None
-            st.session_state.naechste_frage_bereit = None
-            st.rerun()
 
 # --- ANSICHT 2: GLOBALER PUNKTESTAND ---
 elif st.session_state.ansicht == "score":
