@@ -76,50 +76,48 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- DIE SAUBERE LIVE-SCANNER COMPONENT (INTEGRIERT IN STREAMLIT) ---
+# --- DIE SAUBERE LIVE-SCANNER COMPONENT ---
 def st_qr_scanner(key):
     """
-    Rendert einen sauberen HTML5-QR-Scanner, der das Ergebnis über die offizielle
-    Streamlit-API direkt in den Python-State zurückschreibt (ohne URL-Reload!).
+    Rendert einen HTML5-QR-Scanner. Nutzt ein unsichtbares Textfeld,
+    das über ein echtes HTML-Event getriggert wird, um den Wert sauber an Streamlit zu übergeben.
     """
-    html_code = f"""
-    <div id="reader" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
+    wert = st.text_input("QR-Daten-Bridge", key=f"bridge_{key}", label_visibility="collapsed")
     
+    html_code = f"""
+    <div id="reader_{key}" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
+    
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
-        // Streamlit API-Verbindung aufbauen
-        function sendToStreamlit(value) {{
-            window.parent.postMessage({{
-                type: "streamlit:setComponentValue",
-                value: value
-            }}, "*");
+        function onScanSuccess(decodedText, decodedResult) {{
+            let frageId = decodedText;
+            if (decodedText.includes("frage_id=")) {{
+                const urlParts = decodedText.split("frage_id=");
+                if(urlParts.length > 1) {{
+                    frageId = urlParts[1].split("&")[0];
+                }}
+            }}
+            
+            const inputs = window.parent.document.querySelectorAll('input');
+            for (let input of inputs) {{
+                if (input.id && input.id.includes("bridge_{key}")) {{
+                    input.value = frageId;
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    break;
+                }}
+            }}
+            html5QrcodeScanner.clear();
         }}
 
-        // Dynamisches Laden der Bibliothek
-        var script = document.createElement('script');
-        script.src = "https://unpkg.com/html5-qrcode";
-        script.onload = function() {{
-            const html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", {{ fps: 15, qrbox: 250 }}, false
-            );
-            
-            html5QrcodeScanner.render((decodedText) => {{
-                let frageId = decodedText;
-                if (decodedText.includes("frage_id=")) {{
-                    const urlParts = decodedText.split("frage_id=");
-                    if(urlParts.length > 1) {{
-                        frageId = urlParts[1].split("&")[0];
-                    }}
-                }}
-                // Wert sauber an Python schicken
-                sendToStreamlit(frageId);
-                html5QrcodeScanner.clear();
-            }});
-        }};
-        document.head.appendChild(script);
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader_{key}", {{ fps: 15, qrbox: 250 }}, false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
     </script>
     """
-    # Gibt den vom JavaScript gesendeten Wert direkt als Python-Rückgabewert zurück
-    return components.html(html_code, height=360, key=key)
+    components.html(html_code, height=360)
+    return wert
 
 # --- APP STATE DEFAULT INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -179,13 +177,12 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 📷 Vor dem Start: Optional ersten QR-Code scannen")
     
-    # Nutzt die saubere Komponente
     scan_res_setup = st_qr_scanner("setup_scanner")
-    if scan_res_setup:
-        # Falls ein Code erkannt wurde, direkt verarbeiten
+    if scan_res_setup and st.session_state.aktuelle_frage is None:
         zeile = hole_spezifische_frage(scan_res_setup)
         if zeile is not None:
             st.session_state.aktuelle_frage = zeile
+            st.success(f"Frage geladen: {zeile['frage'][:30]}...")
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -305,7 +302,6 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
                 
-            # Hier läuft die saubere Pipeline: Sobald er scannt, liefert scan_res einen Wert
             scan_res = st_qr_scanner(f"runde_scanner_{st.session_state.runde}")
             
             if scan_res:
@@ -355,7 +351,7 @@ elif st.session_state.ansicht == "spiel":
             map_style=None
         ))
 
-# --- ANSICHT 2: Punktestand ---
+# --- ANSICHT 2: PUNKTESTAND ---
 elif st.session_state.ansicht == "score":
     st.subheader("📊 Globaler Punktestand")
     score_data = [{"Spieler": k, "Gesamtpunkte": v} for k, v in st.session_state.scores.items() if k in st.session_state.spieler_namen]
