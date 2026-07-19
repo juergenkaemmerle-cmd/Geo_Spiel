@@ -161,7 +161,6 @@ elif st.session_state.ansicht == "spiel":
                 geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
                 
-                # Behobener Tippfehler bei der Abfrage des Such-Zusatzes
                 if "such_zusatz" in KARTEN_DATEN[st.session_state.gewaehlte_karte]:
                     such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_zusatz"]
                 else:
@@ -230,14 +229,13 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
                 st.rerun()
     else:
-        # --- INTERAKTIVE KARTEN-DARSTELLUNG ---
+        # --- OPTIMIERTE KARTEN-DARSTELLUNG ---
         res = st.session_state.runden_ergebnis
         st.success(f"🏁 **Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
         st.caption(f"💡 *Hintergrund-Info: {res['info']}*")
         
         st.subheader("🗺️ Grafische Kartenauswertung:")
         
-        # Daten für die Kartenelemente vorbereiten
         df_tipps = res["tabelle"].copy()
         df_tipps["Ziel_Lon"] = res["ziel_lon"]
         df_tipps["Ziel_Lat"] = res["ziel_lat"]
@@ -248,15 +246,15 @@ elif st.session_state.ansicht == "spiel":
             "name": res["ziel"]
         }])
         
-        # Pydeck Layer definieren
-        # 1. Verbindungslinien zwischen Tipp und Ziel
+        # 1. Verbindungslinien als gewölbte Bogenlinien (ArcLayer) für coole 3D-Optik
         line_layer = pdk.Layer(
-            "LineLayer",
+            "ArcLayer",
             data=df_tipps,
             get_source_position="[Tipp_Lon, Tipp_Lat]",
             get_target_position="[Ziel_Lon, Ziel_Lat]",
-            get_color="[235, 94, 40, 200]",
-            get_width=4,
+            get_source_color="[255, 75, 75, 160]",  # Start am roten Spielerpunkt
+            get_target_color="[46, 196, 182, 255]",  # Ende am grünen Zielpunkt
+            get_width=5,
             pickable=True
         )
         
@@ -266,7 +264,7 @@ elif st.session_state.ansicht == "spiel":
             data=df_tipps,
             get_position="[Tipp_Lon, Tipp_Lat]",
             get_color="[255, 75, 75]",
-            get_radius=15000,
+            get_radius=12000,
             pickable=True,
             auto_highlight=True
         )
@@ -277,7 +275,7 @@ elif st.session_state.ansicht == "spiel":
             data=df_ziel,
             get_position="[lon, lat]",
             get_color="[46, 196, 182]",
-            get_radius=22000,
+            get_radius=18000,
             pickable=True
         )
 
@@ -287,25 +285,27 @@ elif st.session_state.ansicht == "spiel":
             data=df_tipps,
             get_position="[Tipp_Lon, Tipp_Lat]",
             get_text="Spieler",
-            get_size=16,
+            get_size=15,
             get_color="[255, 255, 255]",
             get_alignment_baseline="'bottom'",
-            background_color="[0, 0, 0, 160]"
+            background_color="[0, 0, 0, 180]"
         )
         
-        # Kartenansicht auf die Mitte Deutschlands zentrieren
+        # Kartenansicht auf Deutschland zentrieren mit 3D-Neigung (pitch) und freiem Controller
         view_state = pdk.ViewState(
             longitude=10.45,
             latitude=51.16,
-            zoom=5.2,
-            pitch=0
+            zoom=5.5,
+            pitch=35,       # Bringt räumliche Tiefe ins Spielfeld
+            bearing=0,
+            controller=True  # Erlaubt Zoom & Drehung direkt für die User!
         )
         
-        # Karte rendern
+        # st.pydeck_chart mit nativem Streamlit-Kartenstil rendern, damit freie Karten geladen werden
         st.pydeck_chart(pdk.Deck(
             layers=[line_layer, tipp_layer, ziel_layer, label_layer],
             initial_view_state=view_state,
-            map_style="mapbox://styles/mapbox/light-v10",
+            map_style=None,  # WICHTIG: Nutzt Streamlits eigene, lizenzfreie Landkarten-Basis
             tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
         ))
         
