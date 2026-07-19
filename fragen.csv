@@ -1,28 +1,101 @@
 karte;frage;ziel;info
-Deutschland 🇩🇪;In welcher Stadt wurde Angela Merkel geboren?;Hamburg;Geboren am 17. Juli 1954 in Hamburg.
-Deutschland 🇩🇪;Wo steht die berühmte Frauenkirche mit ihren markanten Kuppeln?;München;Das weltbekannte Wahrzeichen der bayerischen Landeshauptstadt.
-Deutschland 🇩🇪;In welcher Stadt steht das weltberühmte Holstentor?;Lübeck;Das spätgotische Stadttor ist das Wahrzeichen von Lübeck.
-Baden-Württemberg 🥨;In welcher Stadt steht das höchste Kirchenjahr der Welt?;Ulm;Der Hauptturm des Ulmer Münsters ist stolze 161,53 Meter hoch.
-Baden-Württemberg 🥨;Wo hat der Automobilhersteller Porsche seinen Hauptsitz?;Stuttgart;Genauer gesagt im Stadtteil Zuffenhausen.
-Weltkarte 🗺️;Wo steht der Eiffelturm?;Paris;Erbaut von Gustave Eiffel für die Weltausstellung im Jahr 1889.
-Weltkarte 🗺️;In welcher Stadt steht das weltberühmte Opernhaus das wie Segel aussieht?;Sydney;Das Sydney Opera House wurde 1973 eröffnet.
-Deutschland 🇩🇪;Wo befindet sich die tiefste Landsenke Deutschland 🇩🇪s (3,54 Meter unter dem Meeresspiegel)?;Neuendorf-Sachsenbande;Liegt in Schleswig-Holstein in der Wilstermarsch.
-Deutschland 🇩🇪;In welcher Stadt steht das weltberühmte Holstentor?;Lübeck;Das spätgotische Stadttor war früher sogar auf dem 50-DM-Schein abgebildet.
-Deutschland 🇩🇪;Wo mündet der Nord-Ostsee-Kanal auf der westlichen Seite in die Elbe?;Brunsbüttel;Er ist die meistbefahrene künstliche Seeschifffahrtsstraße der Welt.
-Deutschland 🇩🇪;Welche Universitätsstadt ist für das historische "Göttinger Sieben"-Ereignis bekannt?;Göttingen;Hier protestierten 1837 sieben Professoren (u.a. die Brüder Grimm) gegen die Aufhebung der Verfassung.
-Deutschland 🇩🇪;Wo befindet sich das größte zusammenhängende Fachwerk-Altstadt-Ensemble Deutschland 🇩🇪s?;Quedlinburg;Die Stadt im Harz zählt mit über 2.000 Fachwerkhäusern zum UNESCO-Welterbe.
-Deutschland 🇩🇪;In welcher Stadt wurde 1919 die erste demokratische Verfassung des Deutschen Reiches beschlossen?;Weimar;Die Stadt an der Ilm war die Wirkungsstätte von Goethe und Schiller sowie Geburtsort des Bauhauses.
-Deutschland 🇩🇪;Wo steht die monumentale Walhalla, eine Ruhmeshalle für bedeutende deutsche Persönlichkeiten?;Donaustauf;Errichtet im Auftrag von König Ludwig I. von Bayern, thront sie majestätisch über der Donau nahe Regensburg.
-Deutschland 🇩🇪;Welche Stadt ist der Geburtsort von Albert Einstein und besitzt das höchste Kirchturmunfer der Welt?;Ulm;Das Münster hat einen Turm von 161,53 Metern Höhe.
-Deutschland 🇩🇪;Wo liegt die Saarschleife, eines der bekanntesten Naturdenkmäler des Saarlandes?;Mettlach;Der Fluss Saar macht hier eine spektakuläre 180-Grad-Wendung in einem tiefen Tal.
-Deutschland 🇩🇪;In welcher Stadt befindet sich die älteste noch bestehende soziale Wohnsiedlung der Welt, die Fuggerei?;Augsburg;Gegründet 1521 von Jakob Fugger. Die Jahreskaltmiete beträgt bis heute nominell einen rheinischen Gulden (ca. 0,88 Euro).
-Deutschland 🇩🇪;In welcher Stadt befindet sich der größte historische Krabbenkutterhafen an der ostfriesischen Küste?;Greetsiel;Die über 25 Krabbenkutter im Hafen von Greetsiel bilden die größte Flotte in Ostfriesland.
-Deutschland 🇩🇪;In welcher Stadt befindet sich das weltgrößte Volkswagen-Werk?;Wolfsburg;Das Stammwerk erstreckt sich über eine Fläche, die fast so groß ist wie Gibraltar.
-Deutschland 🇩🇪;Wo fließen die Flüsse Werra und Fulda zusammen, um als Weser weiterzufließen?;Hann. Münden;Bekannt durch den Spruch: 'Wo Werra sich und Fulda küssen, sie ihre Namen büßen müssen...'
-Deutschland 🇩🇪;Welche Stadt gilt als die östlichste Stadt Deutschland 🇩🇪s?;Görlitz;Wegen ihrer perfekt erhaltenen Altstadt ist sie eine extrem beliebte Filmkulisse ('Görliwood').
-Deutschland 🇩🇪;Wo liegt das berühmte "Deutsche Eck", an dem die Mosel in den Rhein mündet?;Koblenz;Hier steht das monumentale Reiterstandbild von Kaiser Wilhelm I.
-Deutschland 🇩🇪;In welcher Stadt befindet sich der Sitz des Bundesverfassungsgerichts?;Karlsruhe;Die Stadt wurde als barocke Planstadt fächerförmig angelegt.
-Deutschland 🇩🇪;Welcher Ort im Schwarzwald ist weltbekannt für die Herstellung traditioneller Kuckucksuhren?;Triberg;Hier befinden sich auch die höchsten Wasserfälle Deutschland 🇩🇪s.
-Deutschland 🇩🇪;Wo liegt der Kehlsteinhas, auf dem das historische "Eagle's Nest" thront?;Berchtesgaden;Ein geschichtsträchtiger Aussichtspunkt in den bayerischen Alpen.
-Deutschland 🇩🇪;Welche Stadt im Ruhrgebiet ist historisch als die "Stadt der tausend Feuer" bekannt?;Gelsenkirchen;Der Name stammt von den zahlreichen Fackeln der Kokereien und Zechen der Schwerindustrie.
-Deutschland 🇩🇪;Wo befindet sich die längste Burg der Welt (1.051 Meter)?;Burghausen;Die imposante Anlage erstreckt sich auf einem schmalen Bergrücken über der Salzach in Oberbayern.
+Deutschland;In welcher Stadt wurde Angela Merkel geboren?;Hamburg;Angela Merkel wurde 1954 in Hamburg geboren, zog aber kurz darauf in die DDR.
+Deutschland;Wo steht die berühmte Frauenkirche mit ihren markanten Kuppeln?;Dresden;Die Frauenkirche wurde im Zweiten Weltkrieg zerstört und später prachtvoll wiederaufgebaut.
+Deutschland;In welcher Stadt steht das weltberühmte Holstentor?;Lübeck;Das Holstentor ist das Wahrzeichen der Hansestadt Lübeck und war früher auf dem 50-DM-Schein.
+Deutschland;Wie heißt die Landeshauptstadt von Hessen?;Wiesbaden;Wiesbaden ist für seine vielen Thermal- und Mineralquellen bekannt.
+Deutschland;Welcher Fluss fließt durch die bayerische Landeshauptstadt München?;Isar;Die Isar entspringt in den Alpen in Tirol und fließt quer durch München.
+Deutschland;In welchem Bundesland liegt der sagenumwobene Brocken im Harz?;Sachsen-Anhalt;Der Brocken ist mit 1141 Metern der höchste Berg im Norden Deutschlands.
+Deutschland;Welche deutsche Großstadt liegt direkt an der Mündung der Weser in die Nordsee?;Bremerhaven;Bremerhaven bildet zusammen mit Bremen das kleinste deutsche Bundesland.
+Deutschland;Wie nennt man das berühmte Felsental in der Sächsischen Schweiz mit der Basteibrücke?;Bastei;Die Bastei bietet eine atemberaubende Aussicht auf das Elbtal.
+Deutschland;Welches ist das flächenmäßig größte Bundesland Deutschlands?;Bayern;Bayern macht rund ein Fünftel der gesamten Landfläche Deutschlands aus.
+Deutschland;An welchem See liegt das berühmte Schloss Herrenchiemsee?;Chiemsee;König Ludwig II. baute das Schloss nach dem Vorbild von Versailles.
+Deutschland;Wie heißt der größte und bekannteste Freizeitpark Deutschlands in Rust?;Europa-Park;Er liegt im Dreiländereck nahe Freiburg im Breisgau.
+Deutschland;In welcher Stadt befindet sich die älteste Universität Deutschlands?;Heidelberg;Die Ruperto Carola wurde bereits im Jahr 1386 gegründet.
+Deutschland;Welcher bekannte Fluss bildet die Grenze zwischen Deutschland und Polen?;Oder;Die Oder fließt weiter nördlich in das Stettiner Haff.
+Deutschland;Wie heißt das waldreiche Mittelgebirge im Südwesten Deutschlands?;Schwarzwald;Bekannt für Kuckucksuhren, Bollenhüte und die Schwarzwälder Kirschtorte.
+Deutschland;Welche Stadt ist die Geburtsstadt von Ludwig van Beethoven?;Bonn;Bonn war zudem von 1949 bis 1990 die Bundeshauptstadt.
+Deutschland;In welchem Bundesland liegt die Insel Sylt?;Schleswig-Holstein;Sylt ist die nördlichste Insel Deutschlands.
+Deutschland;Wie heißt die Landeshauptstadt von Thüringen?;Erfurt;Erfurt ist bekannt für seinen gut erhaltenen mittelalterlichen Stadtkern und die Krämerbrücke.
+Deutschland;Welcher berühmte Kreidefels steht auf der Insel Rügen im Nationalpark Jasmund?;Königsstuhl;Der Königsstuhl ist der markanteste Punkt der Kreideküste.
+Deutschland;Durch welche deutsche Stadt fließt die Elbe kurz vor ihrer Mündung in die Nordsee?;Hamburg;Der Hamburger Hafen ist der größte Seehafen Deutschlands.
+Deutschland;In welcher Stadt befindet sich das imposante Völkerschlachtdenkmal?;Leipzig;Es erinnert an die Völkerschlacht gegen Napoleon im Jahr 1813.
+Deutschland;Wie heißt der tiefste und wasserreichste See Deutschlands?;Bodensee;Er grenzt an Deutschland, Österreich und die Schweiz.
+Deutschland;Welche Stadt ist bekannt für das weltberühmte Lebkuchen- und Lebkuchengewürz-Handwerk?;Nürnberg;Der Nürnberger Christkindlesmarkt zieht jährlich Millionen Besucher an.
+Deutschland;Welches Bundesland umschließt die Bundeshauptstadt Berlin vollständig?;Brandenburg;Potsdam ist die dazugehörige Landeshauptstadt.
+Deutschland;Wie heißt der höchste Berg Deutschlands?;Zugspitze;Die Zugspitze misst stolze 2962 Meter über dem Meeresspiegel.
+Deutschland;Welcher Fluss fließt direkt am Kölner Dom vorbei?;Rhein;Der Rhein ist eine der verkehrsreichsten Wasserstraßen der Welt.
+Deutschland;In welcher Stadt steht das Denkmal der Bremer Stadtmusikanten?;Bremen;Die Bronzeplastik steht direkt an der Westseite des Rathauses.
+Deutschland;Wie heißt die Landeshauptstadt von Nordrhein-Westfalen?;Düsseldorf;Düsseldorf ist unter anderem für die Einkaufsstraße Königsallee bekannt.
+Deutschland;In welchem Gebirge liegt der sagenumwobene Kyffhäuser mit dem Barbarossadenkmal?;Kyffhäusergebirge;Es liegt an der Grenze zwischen Thüringen und Sachsen-Anhalt.
+Deutschland;Welches Bundesland wird auch als das Land der tausend Seen bezeichnet?;Mecklenburg-Vorpommern;Hier befindet sich auch die Müritz, der größte rein deutsche See.
+Deutschland;In welcher Stadt befindet sich die Wuppertaler Schwebebahn?;Wuppertal;Die historische Hochbahn steht seit 1997 unter Denkmalschutz.
+Deutschland;Welcher berühmte Felsen ragt im Mittelrheintal steil empor?;Loreley;Der Sage nach verzauberte eine Nixe dort die Schiffer mit ihrem Gesang.
+Deutschland;Wie heißt die Landeshauptstadt von Rheinland-Pfalz?;Mainz;Mainz ist die Geburtsstadt von Johannes Gutenberg, dem Erfinder des Buchdrucks.
+Deutschland;Welche deutsche Insel liegt mitten in der Nordsee und wird als Hochseeinsel bezeichnet?;Helgoland;Helgoland ist bekannt für den roten Felsen Lange Anna.
+Deutschland;In welcher Stadt befindet sich die berühmte Autostadt des VW-Konzerns?;Wolfsburg;Die Stadt wurde 1938 eigens für das Volkswagenwerk gegründet.
+Deutschland;Wie heißt der größte künstliche See im Ruhrgebiet, der als Naherholungsgebiet dient?;Baldeneysee;Er wurde durch das Anstauen der Ruhr geschaffen.
+Deutschland;In welchem Bundesland liegt das weltberühmte Märchenschloss Neuschwanstein?;Bayern;König Ludwig II. ließ es ab 1869 auf einem Felsen errichten.
+Deutschland;Welcher Fluss fließt durch die Stadt Regensburg?;Donau;Regensburg besitzt eine der ältesten erhaltenen Steinbrücken über die Donau.
+Deutschland;Wie heißt das waldreiche Mittelgebirge an der Grenze zu Tschechien?;Bayerischer Wald;Zusammen mit dem Böhmerwald bildet es das größte zusammenhängende Waldgebiet Mitteleuropas.
+Deutschland;In welcher Stadt steht das Bundesverfassungsgericht?;Karlsruhe;Karlsruhe wird deshalb auch als Residenz des Rechts bezeichnet.
+Deutschland;Wie heißt das Bundesland, das im Norden an Dänemark grenzt?;Schleswig-Holstein;Es ist das einzige deutsche Bundesland zwischen Nord- und Ostsee.
+Deutschland;Welcher See ist der größte See, der vollständig in Deutschland liegt?;Müritz;Die Müritz gehört zur Mecklenburgischen Seenplatte.
+Deutschland;In welcher hessischen Stadt befindet sich das weltberühmte Bankenviertel mit den Wolkenkratzern?;Frankfurt am Main;Frankfurt ist der Sitz der Europäischen Zentralbank.
+Deutschland;Wie heißt die Landeshauptstadt von Sachsen?;Dresden;Wegen seiner barocken Architektur wird Dresden auch Elbflorenz genannt.
+Deutschland;Welche deutsche Insel in der Ostsee ist über die Rügenbrücke mit dem Festland verbunden?;Rügen;Rügen ist die flächengrößte Insel Deutschlands.
+Deutschland;Durch welches Bundesland fließt der Fluss Neckar überwiegend?;Baden-Württemberg;Er mündet bei Mannheim in den Rhein.
+Deutschland;In welcher Stadt befindet sich die weltbekannte Porzellanmanufaktur mit den gekreuzten blauen Schwertern?;Meißen;Das Meissener Porzellan wird seit 1710 hergestellt.
+Deutschland;Wie heißt die Landeshauptstadt des Saarlandes?;Saarbrücken;Saarbrücken entstand 1909 durch den Zusammenschluss dreier Städte.
+Deutschland;Welcher bekannte Nationalpark liegt an der Nordseeküste und ist UNESCO-Weltnaturerbe?;Wattenmeer;Das Wattenmeer bietet Lebensraum für Tausende Tier- und Pflanzenarten.
+Deutschland;In welcher niedersächsischen Stadt steht die berühmte Marktkirche?;Hannover;Hannover ist auch die Landeshauptstadt von Niedersachsen.
+Deutschland;Wie heißt der zweithöchste Berg im Harz?;Wurmberg;Der Wurmberg liegt in Niedersachsen und ist ein beliebtes Skigebiet.
+Deutschland;Welcher Fluss fließt durch die Stadt Passau neben der Donau und der Ilz?;Inn;Passau wird wegen des Zusammenflusses dieser drei Flüsse Dreiflüssestadt genannt.
+Deutschland;In welchem Bundesland liegt die historische Stadt Weimar?;Thüringen;Weimar ist eng mit Goethe, Schiller und der Weimarer Republik verbunden.
+Deutschland;Wie heißt die Landeshauptstadt von Brandenburg?;Potsdam;Potsdam ist weltberühmt für das Schloss Sanssouci.
+Deutschland;Welche Stadt ist für die alljährliche Verleihung des Karlspreises bekannt?;Aachen;Der Aachener Dom war die Krönungskirche zahlreicher deutscher Könige.
+Deutschland;Durch welche Bucht an der Ostsee trennt sich Fehmarn vom Festland?;Fehmarnsund;Er wird durch die Fehmarnsundbrücke überspannt.
+Deutschland;In welchem Mittelgebirge befindet sich die berühmte Skisprungschanze von Oberstdorf?;Allgäuer Alpen;Hier startet traditionell die Vierschanzentournee.
+Deutschland;Wie heißt das größte deutsche Bundesland nach Einwohnerzahl?;Nordrhein-Westfalen;Rund 18 Millionen Menschen leben in NRW.
+Deutschland;Welcher Fluss mündet bei Koblenz am Deutschen Eck in den Rhein?;Mosel;Die Mosel ist bekannt für ihre steilen Weinberge.
+Deutschland;In welcher Stadt befindet sich das weltberühmte Miniaturen Wunderland?;Hamburg;Es ist die größte Modelleisenbahnanlage der Welt.
+Deutschland;Wie heißt die Landeshauptstadt von Sachsen-Anhalt?;Magdeburg;Magdeburg war im Mittelalter eine der bedeutendsten Städte Europas.
+Deutschland;Welche deutsche Insel in der Ostsee ist bekannt für ihre unberührte Natur und das Seebad Ahlbeck?;Usedom;Usedom wird wegen der vielen Sonnenstunden geschätzt.
+Deutschland;In welchem Bundesland liegt der Bodensee-Ort Lindau mit seiner Hafeneinfahrt?;Bayern;Die historische Altstadt von Lindau liegt auf einer Insel.
+Deutschland;Wie heißt das waldreiche Mittelgebirge südlich von Kassel?;Knüllgebirge;Es ist Teil des Hessischen Berglandes.
+Deutschland;Welcher Fluss fließt durch das Herz der Bundeshauptstadt Berlin?;Spree;Die Spree mündet im Berliner Bezirk Spandau in die Havel.
+Deutschland;In welcher Stadt steht das berühmte Ulmer Münster mit dem höchsten Kirchturm der Welt?;Ulm;Der Turm misst stolze 161,53 Meter.
+Deutschland;Wie heißt das kleinste deutsche Bundesland nach Fläche und Einwohnern?;Bremen;Es besteht aus den Städten Bremen und Bremerhaven.
+Deutschland;Welcher See im Allgäu ist für seine malerische Lage und die Nähe zu Schloss Neuschwanstein bekannt?;Alpsee;Der See liegt direkt unterhalb der Königsschlösser.
+Deutschland;In welcher schleswig-holsteinischen Stadt befindet sich das Marine-Ehrenmal Laboe?;Kiel;Kiel ist gleichzeitig die Landeshauptstadt des Bundeslandes.
+Deutschland;Wie heißt das Mittelgebirge, in dem der Fluss Ruhr entspringt?;Sauerland;Das Sauerland wird auch als das Land der tausend Berge bezeichnet.
+Deutschland;Welche bayerische Stadt ist weltweit für die alljährlichen Richard-Wagner-Festspiele bekannt?;Bayreuth;Die Festspiele finden im eigens erbauten Festspielhaus auf dem Grünen Hügel statt.
+Deutschland;An welchem Fluss liegt die berühmte Wartburg bei Eisenach?;Hörsel;Die Wartburg war der Zufluchtsort von Martin Luther bei seiner Bibelübersetzung.
+Deutschland;In welchem Bundesland liegt der Geysir Andernach, der höchste Kaltwassergeysir der Welt?;Rheinland-Pfalz;Der Geysir springt etwa alle zwei Stunden bis zu 60 Meter hoch.
+Deutschland;Wie heißt das große Heidegebiet im Nordosten Niedersachsens?;Lüneburger Heide;Bekannt für die lilafarbene Heideblüte im Spätsommer.
+Deutschland;Welche thüringische Stadt ist für ihre lange Tradition im optischen Gerätebau (Zeiss) bekannt?;Jena;Jena ist zudem eine bedeutende Universitätsstadt.
+Deutschland;Durch welche deutsche Großstadt fließt der Fluss Main, bevor er in den Rhein mündet?;Frankfurt am Main;Der Main mündet bei Mainz-Kostheim in den Rhein.
+Deutschland;In welcher mecklenburgischen Stadt befindet sich das prächtige Schloss Schwerin?;Schwerin;Schwerin ist die Landeshauptstadt von Mecklenburg-Vorpommern.
+Deutschland;Wie heißt die zweitgrößte Stadt in Bayern nach München?;Nürnberg;Nürnberg liegt im Regierungsbezirk Mittelfranken.
+Deutschland;Welcher Nationalpark liegt im Südwesten Deutschlands und schützt die dortigen Grinden?;Nationalpark Schwarzwald;Er wurde im Jahr 2014 gegründet.
+Deutschland;In welcher Stadt an der Donau befindet sich das berühmte Monument Walhalla?;Regensburg;Die Gedenkstätte Walhalla steht in Donaustauf nahe Regensburg.
+Deutschland;Wie heißt die Landeshauptstadt von Baden-Württemberg?;Stuttgart;Stuttgart ist weltbekannt für die Automobilhersteller Porsche und Mercedes-Benz.
+Deutschland;Welche Ostseeinsel gehört zum größten Teil zu Deutschland und zu einem kleinen Teil zu Polen?;Usedom;Der östliche Zipfel der Insel gehört zur polnischen Woiwodschaft Westpommern.
+Deutschland;In welchem Bundesland liegt der bekannte Wintersportort Winterberg?;Nordrhein-Westfalen;Winterberg liegt im Rothaargebirge im Sauerland.
+Deutschland;Wie heißt der größte Fluss, der ausschließlich durch deutsches Gebiet fließt?;Weser;Die Weser entsteht durch den Zusammenfluss von Werra und Fulda.
+Deutschland;In welcher Stadt befindet sich der älteste noch bestehende Zoo Deutschlands?;Berlin;Der Zoologische Garten Berlin wurde 1844 eröffnet.
+Deutschland;Welcher Berg ist der höchste Berg des Pfälzerwaldes?;Kalmit;Die Kalmit ist 672,6 Meter hoch und trägt einen Aussichtsturm.
+Deutschland;Wie heißt die historische Universitätsstadt an der Lahn in Hessen?;Marburg;Marburg ist für seine steilen Gassen und das Landgrafenschloss bekannt.
+Deutschland;Welcher Fluss fließt durch das berühmte Elbsandsteingebirge?;Elbe;Die Elbe hat über Jahrtausende hinweg das markante Sandsteingebirge geformt.
+Deutschland;In welcher niedersächsischen Stadt befindet sich das berühmte Roemer- und Pelizaeus-Museum?;Hildesheim;Das Museum ist weltweit bekannt für seine altägyptische Sammlung.
+Deutschland;Wie heißt das waldreiche Mittelgebirge an der Grenze zwischen Hessen und Bayern?;Rhön;Die Rhön wird wegen ihrer weiten Ausblicke auch als Land der offenen Fernen bezeichnet.
+Deutschland;Welcher See im Salzkammergut-Stil liegt malerisch am Fuße des Watzmanns?;Königssee;Der Königssee liegt im Nationalpark Berchtesgaden.
+Deutschland;In welcher Stadt steht die berühmte Krämerbrücke, die durchgehend mit Häusern bebaut ist?;Erfurt;Die Krämerbrücke ist das längste bebaute Brückenbauwerk Europas.
+Deutschland;Wie heißt das Bundesland im Südwesten Deutschlands?;Baden-Württemberg;Es entstand 1952 durch den Zusammenschluss dreier Altstaaten.
+Deutschland;Welcher Fluss fließt durch die Stadt Bremen?;Weser;Die Weser mündet rund 60 Kilometer weiter nördlich in die Nordsee.
+Deutschland;In welcher bayerischen Stadt an der Donau fand im Jahr 1972 die Ruderregatta der Olympischen Spiele statt?;München;Die Regattastrecke liegt im Norden Münchens in Oberschleißheim.
+Deutschland;Wie heißt der höchste Berg im Schwarzwald?;Feldberg;Der Feldberg ist mit 1493 Metern die höchste Erhebung aller deutschen Mittelgebirge.
+Deutschland;Welche Stadt im Ruhrgebiet ist für das Deutsche Bergbau-Museum bekannt?;Bochum;Es ist das größte Bergbaumuseum der Welt.
+Deutschland;Durch welches Bundesland fließt der Fluss Saale überwiegend, bevor er in die Elbe mündet?;Sachsen-Anhalt;Die Saale entspringt im Fichtelgebirge in Bayern.
+Deutschland;In welcher schleswig-holsteinischen Stadt findet alljährlich die Kieler Woche statt?;Kiel;Die Kieler Woche ist eine der weltweit größten Segelsportveranstaltungen.
+Deutschland;Wie heißt der größte künstlich angelegte See in Hessen?;Edersee;Der Edersee dient dem Hochwasserschutz und der Stromerzeugung.
+Deutschland;In welcher sächsischen Stadt befindet sich die berühmte Frauenkirche?;Dresden;Sie gilt als ein monumentales Meisterwerk des europäischen Barocks.
