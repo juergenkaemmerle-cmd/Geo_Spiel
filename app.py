@@ -6,11 +6,10 @@ import pandas as pd
 import random
 import math
 import pydeck as pdk
-import urllib.parse
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- FRAGENKATALOG DIREKT UND FRISCH LADEN ---
+# --- FRAGENKATALOG LADE-FUNKTION ---
 def lade_fragen():
     try:
         df = pd.read_csv("fragen.csv", sep=";")
@@ -25,7 +24,6 @@ def lade_fragen():
 
 fragen_df = lade_fragen()
 
-# GRENZEN FÜR GITTER
 KARTEN_DATEN = {
     "Deutschland 🇩🇪": {"bounds": (5.20, 47.27, 15.70, 54.91), "such_zusatz": ", Germany"}
 }
@@ -59,10 +57,6 @@ def haversine_distance(lon1, lat1, lon2, lat2):
 
 def hole_spezifische_frage(frage_id):
     try:
-        if "frage_id=" in str(frage_id):
-            parsed = urllib.parse.urlparse(str(frage_id))
-            frage_id = urllib.parse.parse_qs(parsed.query).get("frage_id", [None])[0]
-        
         idx = int(str(frage_id).strip())
         if 0 <= idx < len(fragen_df):
             return fragen_df.iloc[idx]
@@ -82,49 +76,52 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- LIVE-SCANNER COMPONENT ---
-def render_live_scanner(key_id):
+# --- DIE SAUBERE LIVE-SCANNER COMPONENT (INTEGRIERT IN STREAMLIT) ---
+def st_qr_scanner(key):
+    """
+    Rendert einen sauberen HTML5-QR-Scanner, der das Ergebnis über die offizielle
+    Streamlit-API direkt in den Python-State zurückschreibt (ohne URL-Reload!).
+    """
     html_code = f"""
-    <div id="reader" style="width: 100%; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;"></div>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <div id="reader" style="width: 100%; border: 1px solid #ddd; border-radius: 8px;"></div>
+    
     <script>
-        function onScanSuccess(decodedText, decodedResult) {{
-            let frageId = decodedText;
-            if (decodedText.includes("frage_id=")) {{
-                const urlParts = decodedText.split("frage_id=");
-                if(urlParts.length > 1) {{
-                    frageId = urlParts[1].split("&")[0];
-                }}
-            }}
-            
-            const parentInputs = window.parent.document.querySelectorAll('input[type="text"]');
-            let gefunden = false;
-            for (let input of parentInputs) {{
-                if (input.placeholder && input.placeholder.includes("{key_id}")) {{
-                    input.value = frageId;
-                    const event = new Event('input', {{ bubbles: true }});
-                    input.dispatchEvent(event);
-                    const enterEvent = new KeyboardEvent('keydown', {{
-                        bubbles: true, cancelable: true, key: "Enter", keyCode: 13
-                    }});
-                    input.dispatchEvent(enterEvent);
-                    gefunden = true;
-                    break;
-                }}
-            }}
-            if(gefunden) {{
-                html5QrcodeScanner.clear();
-            }}
+        // Streamlit API-Verbindung aufbauen
+        function sendToStreamlit(value) {{
+            window.parent.postMessage({{
+                type: "streamlit:setComponentValue",
+                value: value
+            }}, "*");
         }}
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", {{ fps: 15, qrbox: 260 }}, false
-        );
-        html5QrcodeScanner.render(onScanSuccess);
+
+        // Dynamisches Laden der Bibliothek
+        var script = document.createElement('script');
+        script.src = "https://unpkg.com/html5-qrcode";
+        script.onload = function() {{
+            const html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", {{ fps: 15, qrbox: 250 }}, false
+            );
+            
+            html5QrcodeScanner.render((decodedText) => {{
+                let frageId = decodedText;
+                if (decodedText.includes("frage_id=")) {{
+                    const urlParts = decodedText.split("frage_id=");
+                    if(urlParts.length > 1) {{
+                        frageId = urlParts[1].split("&")[0];
+                    }}
+                }}
+                // Wert sauber an Python schicken
+                sendToStreamlit(frageId);
+                html5QrcodeScanner.clear();
+            }});
+        }};
+        document.head.appendChild(script);
     </script>
     """
-    components.html(html_code, height=340)
+    # Gibt den vom JavaScript gesendeten Wert direkt als Python-Rückgabewert zurück
+    return components.html(html_code, height=360, key=key)
 
-# --- APP STATE INIT ---
+# --- APP STATE DEFAULT INIT ---
 if "setup_erledigt" not in st.session_state:
     st.session_state.setup_erledigt = False
 if "ansicht" not in st.session_state:
@@ -180,37 +177,24 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 📷 Live QR-Code Scanner (Automatischer Start)")
+    st.markdown("### 📷 Vor dem Start: Optional ersten QR-Code scannen")
     
-    placeholder_id = "SCANNER_TARGET_SETUP"
-    scanned_input = st.text_input("Gescannte ID / Manuelle Eingabe:", placeholder=placeholder_id, key="setup_manual_input")
-    
-    if scanned_input:
-        st.session_state.gewaehlte_karte = karte
-        st.session_state.spieler_namen = namen
-        for name in namen:
-            if name not in st.session_state.scores:
-                st.session_state.scores[name] = 0
-        
-        zeile = hole_spezifische_frage(scanned_input)
+    # Nutzt die saubere Komponente
+    scan_res_setup = st_qr_scanner("setup_scanner")
+    if scan_res_setup:
+        # Falls ein Code erkannt wurde, direkt verarbeiten
+        zeile = hole_spezifische_frage(scan_res_setup)
         if zeile is not None:
             st.session_state.aktuelle_frage = zeile
-        else:
-            st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
-            
-        st.session_state.setup_erledigt = True
-        st.session_state.ansicht = "spiel"
-        st.rerun()
-
-    render_live_scanner(placeholder_id)
     
-    if st.button("Ohne QR-Code starten (Zufallsfrage) 🚀", type="primary"):
+    if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
         st.session_state.spieler_namen = namen
         for name in namen:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
-        st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
+        if st.session_state.aktuelle_frage is None:
+            st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
         st.session_state.setup_erledigt = True
         st.session_state.ansicht = "spiel"
         st.rerun()
@@ -238,12 +222,7 @@ elif st.session_state.ansicht == "spiel":
             with st.spinner("Orakel ermittelt Koordinaten..."):
                 geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
-                
-                if "such_zusatz" in KARTEN_DATEN[st.session_state.gewaehlte_karte]:
-                    such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_zusatz"]
-                else:
-                    such_string = ziel_ort + ", Germany"
-                    
+                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Germany")
                 location = geolocator.geocode(such_string)
             
             if not location:
@@ -261,28 +240,20 @@ elif st.session_state.ansicht == "spiel":
                 korrekter_buchstabe = y_achsen_werte[corr_y_idx]
                 
                 korrektes_feld = f"{korrekter_buchstabe}{korrekte_zahl}"
-                
                 ergebnisse = []
                 abstaende_km = {}
                 
                 for name, tipp in tipps.items():
                     tx, ty = get_field_center_gps(tipp, st.session_state.gewaehlte_karte)
                     distanz = haversine_distance(tx, ty, ziel_lon, ziel_lat)
-                    
                     punkte_dieser_runde = 0
                     if tipp == korrektes_feld:
                         st.session_state.scores[name] += 3
                         punkte_dieser_runde += 3
-                        
                     abstaende_km[name] = distanz
                     ergebnisse.append({
-                        "Spieler": name, 
-                        "Tipp": tipp,
-                        "Tipp_Lon": tx,
-                        "Tipp_Lat": ty,
-                        "Abstand (km)": round(distanz, 1), 
-                        "Volltreffer": "🎉 Ja (+3 Pkt)" if tipp == korrektes_feld else "Nein",
-                        "Punkte": punkte_dieser_runde
+                        "Spieler": name, "Tipp": tipp, "Tipp_Lon": tx, "Tipp_Lat": ty,
+                        "Abstand (km)": round(distanz, 1), "Volltreffer": "🎉 Ja (+3 Pkt)" if tipp == korrektes_feld else "Nein"
                     })
                 
                 if abstaende_km:
@@ -297,15 +268,12 @@ elif st.session_state.ansicht == "spiel":
                 
                 st.session_state.runde += 1
                 st.session_state.runden_ergebnis = {
-                    "ziel": ziel_ort.upper(),
-                    "ziel_lon": ziel_lon,
-                    "ziel_lat": ziel_lat,
-                    "info": st.session_state.aktuelle_frage['info'],
-                    "feld": korrektes_feld,
+                    "ziel": ziel_ort.upper(), "ziel_lon": ziel_lon, "ziel_lat": ziel_lat,
+                    "info": st.session_state.aktuelle_frage['info'], "feld": korrektes_feld,
                     "tabelle": pd.DataFrame(ergebnisse)
                 }
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
-                st.session_state.scan_modus_aktiv = False # Initial geschlossen
+                st.session_state.scan_modus_aktiv = False
                 st.rerun()
     else:
         res = st.session_state.runden_ergebnis
@@ -313,11 +281,11 @@ elif st.session_state.ansicht == "spiel":
         st.markdown(f"💡 *Hintergrund-Info: {res['info']}*")
         
         st.subheader("📈 Runden-Details & Punkteverteilung:")
-        st.table(res["tabelle"].set_index("Spieler").drop(columns=["Punkte", "Tipp_Lon", "Tipp_Lat"]))
+        st.table(res["tabelle"].set_index("Spieler").drop(columns=["Tipp_Lon", "Tipp_Lat"]))
         
         st.divider()
         
-        # --- BLOCK FÜR NÄCHSTE RUNDE (GESTEUERT ÜBER BUTTON) ---
+        # --- KLAR GESTEUERTER SCAN-ABLAUF ---
         if not st.session_state.scan_modus_aktiv:
             c_btn1, c_btn2 = st.columns(2)
             with c_btn1:
@@ -337,11 +305,11 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
                 
-            placeholder_runde_id = f"SCANNER_TARGET_RUNDE_{st.session_state.runde}"
-            naechster_input = st.text_input("Erfasste ID:", placeholder=placeholder_runde_id, key=f"runde_manual_input_{st.session_state.runde}")
+            # Hier läuft die saubere Pipeline: Sobald er scannt, liefert scan_res einen Wert
+            scan_res = st_qr_scanner(f"runde_scanner_{st.session_state.runde}")
             
-            if naechster_input:
-                zeile = hole_spezifische_frage(naechster_input)
+            if scan_res:
+                zeile = hole_spezifische_frage(scan_res)
                 if zeile is not None:
                     st.session_state.aktuelle_frage = zeile
                 else:
@@ -351,84 +319,45 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.naechste_frage_bereit = None
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
-
-            render_live_scanner(placeholder_runde_id)
         
         st.divider()
         
-        # --- DIE MAP GANZ UNTEN ---
+        # --- MAP LAYER ---
         st.subheader("🗺️ Visueller Abgleich auf der Deutschlandkarte:")
-        
         df_tipps = res["tabelle"].copy()
         df_tipps["Ziel_Lon"] = res["ziel_lon"]
         df_tipps["Ziel_Lat"] = res["ziel_lat"]
         
-        df_ziel = pd.DataFrame([{
-            "lon": res["ziel_lon"],
-            "lat": res["ziel_lat"],
-            "name": res["ziel"]
-        }])
+        df_ziel = pd.DataFrame([{"lon": res["ziel_lon"], "lat": res["ziel_lat"], "name": res["ziel"]}])
         
         line_layer = pdk.Layer(
-            "ArcLayer",
-            data=df_tipps,
-            get_source_position="[Tipp_Lon, Tipp_Lat]",
-            get_target_position="[Ziel_Lon, Ziel_Lat]",
-            get_source_color="[255, 75, 75, 160]",
-            get_target_color="[46, 196, 182, 255]",
-            get_width=5,
-            pickable=True
+            "ArcLayer", data=df_tipps,
+            get_source_position="[Tipp_Lon, Tipp_Lat]", get_target_position="[Ziel_Lon, Ziel_Lat]",
+            get_source_color="[255, 75, 75, 160]", get_target_color="[46, 196, 182, 255]", get_width=5
         )
-        
         tipp_layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=df_tipps,
-            get_position="[Tipp_Lon, Tipp_Lat]",
-            get_color="[255, 75, 75]",
-            get_radius=12000,
-            pickable=True,
-            auto_highlight=True
+            "ScatterplotLayer", data=df_tipps, get_position="[Tipp_Lon, Tipp_Lat]",
+            get_color="[255, 75, 75]", get_radius=12000
         )
-        
         ziel_layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=df_ziel,
-            get_position="[lon, lat]",
-            get_color="[46, 196, 182]",
-            get_radius=18000,
-            pickable=True
+            "ScatterplotLayer", data=df_ziel, get_position="[lon, lat]",
+            get_color="[46, 196, 182]", get_radius=18000
         )
-
         label_layer = pdk.Layer(
-            "TextLayer",
-            data=df_tipps,
-            get_position="[Tipp_Lon, Tipp_Lat]",
-            get_text="Spieler",
-            get_size=15,
-            get_color="[255, 255, 255]",
-            get_alignment_baseline="'bottom'",
+            "TextLayer", data=df_tipps, get_position="[Tipp_Lon, Tipp_Lat]",
+            get_text="Spieler", get_size=15, get_color="[255, 255, 255]",
             background_color="[0, 0, 0, 180]"
-        )
-        
-        view_state = pdk.ViewState(
-            longitude=10.45,
-            latitude=51.16,
-            zoom=5.0,
-            pitch=35,
-            bearing=0,
-            controller=True
         )
         
         st.pydeck_chart(pdk.Deck(
             layers=[line_layer, tipp_layer, ziel_layer, label_layer],
-            initial_view_state=view_state,
-            map_style=None, 
-            tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
+            initial_view_state=pdk.ViewState(longitude=10.45, latitude=51.16, zoom=5.0, pitch=35, controller=True),
+            map_style=None
         ))
 
-# --- ANSICHT 2: GLOBALER PUNKTESTAND ---
+# --- ANSICHT 2: Punktestand ---
 elif st.session_state.ansicht == "score":
-    st.subheader("📊 Globaler Punktestand (Aktuelles Spiel)")
+    st.subheader("📊 Globaler Punktestand")
     score_data = [{"Spieler": k, "Gesamtpunkte": v} for k, v in st.session_state.scores.items() if k in st.session_state.spieler_namen]
     df_score = pd.DataFrame(score_data)
     
@@ -436,10 +365,8 @@ elif st.session_state.ansicht == "score":
         df_score = df_score.sort_values(by="Gesamtpunkte", ascending=False).reset_index(drop=True)
         st.dataframe(df_score.set_index("Spieler"), use_container_width=True)
         st.bar_chart(df_score.set_index("Spieler"), y="Gesamtpunkte", color="#4bd6ff")
-    else:
-        st.info("Noch keine Punkte vergeben.")
         
-    if st.button("Scoreboard & Runden komplett zurücksetzen 🔄", type="secondary"):
+    if st.button("Scoreboard zurücksetzen 🔄", type="secondary"):
         st.session_state.scores = {name: 0 for name in st.session_state.spieler_namen}
         st.session_state.runde = 0
         st.session_state.runden_ergebnis = None
