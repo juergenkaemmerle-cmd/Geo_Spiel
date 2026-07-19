@@ -229,7 +229,7 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
                 st.rerun()
     else:
-        # --- OPTIMIERTE KARTEN-DARSTELLUNG ---
+        # --- KARTEN-DARSTELLUNG MIT OPTIMIERTEM DEUTSCHLAND-ZOOM ---
         res = st.session_state.runden_ergebnis
         st.success(f"🏁 **Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
         st.caption(f"💡 *Hintergrund-Info: {res['info']}*")
@@ -246,14 +246,14 @@ elif st.session_state.ansicht == "spiel":
             "name": res["ziel"]
         }])
         
-        # 1. Verbindungslinien als gewölbte Bogenlinien (ArcLayer) für coole 3D-Optik
+        # 1. Verbindungslinien (ArcLayer)
         line_layer = pdk.Layer(
             "ArcLayer",
             data=df_tipps,
             get_source_position="[Tipp_Lon, Tipp_Lat]",
             get_target_position="[Ziel_Lon, Ziel_Lat]",
-            get_source_color="[255, 75, 75, 160]",  # Start am roten Spielerpunkt
-            get_target_color="[46, 196, 182, 255]",  # Ende am grünen Zielpunkt
+            get_source_color="[255, 75, 75, 160]",
+            get_target_color="[46, 196, 182, 255]",
             get_width=5,
             pickable=True
         )
@@ -279,7 +279,7 @@ elif st.session_state.ansicht == "spiel":
             pickable=True
         )
 
-        # 4. Text-Labels für Spielernamen über ihren Punkten
+        # 4. Text-Labels für Spielernamen
         label_layer = pdk.Layer(
             "TextLayer",
             data=df_tipps,
@@ -291,21 +291,21 @@ elif st.session_state.ansicht == "spiel":
             background_color="[0, 0, 0, 180]"
         )
         
-        # Kartenansicht auf Deutschland zentrieren mit 3D-Neigung (pitch) und freiem Controller
+        # KARTENANSICHT: Zoom angepasst auf 5.0 für die ideale Deutschland-Gesamtübersicht
         view_state = pdk.ViewState(
             longitude=10.45,
             latitude=51.16,
-            zoom=5.5,
-            pitch=35,       # Bringt räumliche Tiefe ins Spielfeld
+            zoom=5.0,        # Optimiert: Weiter herausgezoomt für ganz Deutschland
+            pitch=35,        # 3D-Neigung für räumlichen Bogen-Effekt
             bearing=0,
-            controller=True  # Erlaubt Zoom & Drehung direkt für die User!
+            controller=True  # Ermöglicht manuelles Zoomen & Verschieben
         )
         
-        # st.pydeck_chart mit nativem Streamlit-Kartenstil rendern, damit freie Karten geladen werden
+        # Rendern mit freiem Kartenhintergrund
         st.pydeck_chart(pdk.Deck(
             layers=[line_layer, tipp_layer, ziel_layer, label_layer],
             initial_view_state=view_state,
-            map_style=None,  # WICHTIG: Nutzt Streamlits eigene, lizenzfreie Landkarten-Basis
+            map_style=None,  # Verwendet das freie Kartenmaterial von Streamlit
             tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
         ))
         
