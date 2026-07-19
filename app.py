@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import random
 import math
-import pydeck as pdk  # Für die grafische Kartendarstellung
+import pydeck as pdk
+import urllib.parse
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
@@ -55,6 +56,20 @@ def haversine_distance(lon1, lat1, lon2, lat2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+def hole_spezifische_frage(frage_id):
+    try:
+        idx = int(frage_id)
+        if 0 <= idx < len(fragen_df):
+            zeile = fragen_df.iloc[idx]
+            return {
+                "frage": zeile["frage"],
+                "ziel": zeile["ziel"],
+                "info": zeile["info"]
+            }
+    except ValueError:
+        pass
+    return None
+
 def frische_frage_ziehen(karte_name):
     reiner_name = karte_name.split(" ")[0].strip()
     verfuegbare = fragen_df[(fragen_df["karte"] == karte_name) | (fragen_df["karte"] == reiner_name)]
@@ -91,6 +106,20 @@ if "runden_ergebnis" not in st.session_state:
     st.session_state.runden_ergebnis = None
 if "naechste_frage_bereit" not in st.session_state:
     st.session_state.naechste_frage_bereit = None
+if "letzte_verarbeitete_id" not in st.session_state:
+    st.session_state.letzte_verarbeitete_id = None
+
+# --- WICHTIG: LIVE EXTRACT AUS DER URL ---
+query_params = st.query_params
+url_frage_id = query_params.get("frage_id", None)
+
+# Wenn eine NEUE Frage-ID über die URL reinkommt, laden wir sie sofort
+if url_frage_id and url_frage_id != st.session_state.letzte_verarbeitete_id:
+    spezifische = hole_spezifische_frage(url_frage_id)
+    if spezifische:
+        st.session_state.aktuelle_frage = spezifische
+        st.session_state.letzte_verarbeitete_id = url_frage_id
+        st.session_state.runden_ergebnis = None  # Altes Ergebnis löschen für die neue Runde
 
 # --- HEADER / NAVIGATION VIA BUTTONS ---
 st.title("🏆 Geo-Master Quiz-Leiter")
@@ -125,6 +154,10 @@ if not st.session_state.setup_erledigt:
             name = st.text_input(f"Name Spieler {i+1}:", value=default_name, key=f"setup_name_{i}")
             namen.append(name)
             
+    st.divider()
+    st.markdown("### 📷 Manuelle ID Eingabe")
+    scanned_input = st.text_input("Falls kein URL-Scan genutzt wird, ID hier eingeben:", placeholder="Z.B. 12")
+    
     if st.button("Speichern & Spiel starten 🚀", type="primary"):
         st.session_state.gewaehlte_karte = karte
         st.session_state.spieler_namen = namen
@@ -132,7 +165,14 @@ if not st.session_state.setup_erledigt:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
+        if scanned_input:
+            spezifische = hole_spezifische_frage(scanned_input)
+            if spezifische:
+                st.session_state.aktuelle_frage = spezifische
+        
+        if st.session_state.aktuelle_frage is None:
+            st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
+            
         st.session_state.setup_erledigt = True
         st.session_state.ansicht = "spiel"
         st.rerun()
@@ -229,12 +269,16 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
                 st.rerun()
     else:
-        # --- KARTEN-DARSTELLUNG MIT OPTIMIERTEM DEUTSCHLAND-ZOOM ---
         res = st.session_state.runden_ergebnis
         st.success(f"🏁 **Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
-        st.caption(f"💡 *Hintergrund-Info: {res['info']}*")
+        st.markdown(f"💡 *Hintergrund-Info: {res['info']}*")
         
-        st.subheader("🗺️ Grafische Kartenauswertung:")
+        st.subheader("📈 Runden-Details & Punkteverteilung:")
+        st.table(res["tabelle"].set_index("Spieler").drop(columns=["Punkte", "Tipp_Lon", "Tipp_Lat"]))
+        
+        st.divider()
+        
+        st.subheader("🗺️ Visueller Abgleich auf der Deutschlandkarte:")
         
         df_tipps = res["tabelle"].copy()
         df_tipps["Ziel_Lon"] = res["ziel_lon"]
@@ -246,7 +290,6 @@ elif st.session_state.ansicht == "spiel":
             "name": res["ziel"]
         }])
         
-        # 1. Verbindungslinien (ArcLayer)
         line_layer = pdk.Layer(
             "ArcLayer",
             data=df_tipps,
@@ -258,7 +301,6 @@ elif st.session_state.ansicht == "spiel":
             pickable=True
         )
         
-        # 2. Die Tipps der Spieler (Rote Punkte)
         tipp_layer = pdk.Layer(
             "ScatterplotLayer",
             data=df_tipps,
@@ -269,7 +311,6 @@ elif st.session_state.ansicht == "spiel":
             auto_highlight=True
         )
         
-        # 3. Das reale Ergebnis (Mintgrüner Punkt)
         ziel_layer = pdk.Layer(
             "ScatterplotLayer",
             data=df_ziel,
@@ -279,7 +320,6 @@ elif st.session_state.ansicht == "spiel":
             pickable=True
         )
 
-        # 4. Text-Labels für Spielernamen
         label_layer = pdk.Layer(
             "TextLayer",
             data=df_tipps,
@@ -291,26 +331,23 @@ elif st.session_state.ansicht == "spiel":
             background_color="[0, 0, 0, 180]"
         )
         
-        # KARTENANSICHT: Zoom angepasst auf 5.0 für die ideale Deutschland-Gesamtübersicht
         view_state = pdk.ViewState(
             longitude=10.45,
             latitude=51.16,
-            zoom=5.0,        # Optimiert: Weiter herausgezoomt für ganz Deutschland
-            pitch=35,        # 3D-Neigung für räumlichen Bogen-Effekt
+            zoom=5.0,
+            pitch=35,
             bearing=0,
-            controller=True  # Ermöglicht manuelles Zoomen & Verschieben
+            controller=True
         )
         
-        # Rendern mit freiem Kartenhintergrund
         st.pydeck_chart(pdk.Deck(
             layers=[line_layer, tipp_layer, ziel_layer, label_layer],
             initial_view_state=view_state,
-            map_style=None,  # Verwendet das freie Kartenmaterial von Streamlit
+            map_style=None, 
             tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
         ))
         
-        st.subheader("📈 Runden-Details:")
-        st.table(res["tabelle"].set_index("Spieler").drop(columns=["Punkte", "Tipp_Lon", "Tipp_Lat"]))
+        st.divider()
         
         if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
             st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
