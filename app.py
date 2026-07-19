@@ -82,44 +82,66 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- LIVE JAVASCRIPT SCANNER COMPONENT ---
-def live_qr_scanner(key):
-    """ Rendert einen echten Live-Videoscan im Browser, der sofort triggert. """
+# --- FUNKTIONIERENDER LIVE-SCANNER MIT ZURÜCKMELDUNG ---
+def render_live_scanner(key_id):
+    """
+    Erstellt ein HTML-Iframe mit html5-qrcode.
+    Nutzt ein unsichtbares Streamlit-Inputfeld der Parent-Seite, um den Wert direkt
+    und ohne Klick zu übertragen und einen automatischen Rerun auszulösen.
+    """
     html_code = f"""
-    <div id="reader-{key}" style="width: 100%; max-width: 500px; margin: auto; border: 1px solid #ccc; border-radius: 8px;"></div>
+    <div id="reader" style="width: 100%; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;"></div>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
         function onScanSuccess(decodedText, decodedResult) {{
-            // Sende das Ergebnis sofort an Streamlit zurück via URL-Parameter
-            const currentUrl = new URL(window.parent.location.href);
-            
-            // Extrahiere frage_id falls es eine volle URL war
             let frageId = decodedText;
+            
+            // Falls eine komplette URL gescannt wurde, filtere die ID heraus
             if (decodedText.includes("frage_id=")) {{
-                const urlParams = new URLSearchParams(decodedText.split('?')[1]);
-                frageId = urlParams.get('frage_id');
+                const urlParts = decodedText.split("frage_id=");
+                if(urlParts.length > 1) {{
+                    // Nimm alles nach frage_id= bis zum nächsten & oder Ende
+                    frageId = urlParts[1].split("&")[0];
+                }}
             }}
             
-            // Setze den versteckten Inputwert im Streamlit-Parent-Frame ab
-            window.parent.postMessage({{
-                type: 'streamlit:setComponentValue',
-                value: frageId
-            }}, '*');
+            // Finde das versteckte/sichtbare Textfeld im übergeordneten Streamlit-Fenster
+            // Wir suchen nach allen Textareas/Inputs im Streamlit DOM
+            const parentInputs = window.parent.document.querySelectorAll('input[type="text"]');
             
-            // Stoppe den Scanner nach Erfolg
-            html5QrcodeScanner.clear();
+            let gefunden = false;
+            for (let input of parentInputs) {{
+                // Wir suchen gezielt das Input-Feld, das für diesen Scanner reserviert ist
+                if (input.placeholder && input.placeholder.includes("{key_id}")) {{
+                    input.value = frageId;
+                    
+                    // Simuliere Klick/Enter/Input-Event, damit Streamlit den State übernimmt
+                    const event = new Event('input', {{ bubbles: true }});
+                    input.dispatchEvent(event);
+                    
+                    const enterEvent = new KeyboardEvent('keydown', {{
+                        bubbles: true, cancelable: true, key: "Enter", keyCode: 13
+                    }});
+                    input.dispatchEvent(enterEvent);
+                    
+                    gefunden = true;
+                    break;
+                }}
+            }}
+            
+            if(gefunden) {{
+                // Scanner stoppen
+                html5QrcodeScanner.clear();
+            }}
         }}
 
         const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader-{key}", {{ fps: 10, qrbox: 250 }}, /* verbose= */ false
+            "reader", {{ fps: 15, qrbox: 260 }}, false
         );
         html5QrcodeScanner.render(onScanSuccess);
     </script>
     """
-    # Streamlit Custom Component simulieren über ein iframe mit Rückkanal-Option
-    # Da reines HTML keinen direkten State an st.iframe schickt, nutzen wir ein getarntes text_input für den Fallback
-    # und fangen den Input ab. Für beste Experience nutzen wir hier st.components
-    return html_code
+    components.html(html_code, height=340)
 
 # --- APP STATE INIT ---
 if "setup_erledigt" not in st.session_state:
@@ -141,7 +163,7 @@ if "runden_ergebnis" not in st.session_state:
 if "naechste_frage_bereit" not in st.session_state:
     st.session_state.naechste_frage_bereit = None
 
-# --- HEADER / NAVIGATION VIA BUTTONS ---
+# --- HEADER / NAVIGATION ---
 st.title("🏆 Geo-Master Quiz-Leiter")
 
 if st.session_state.setup_erledigt:
@@ -177,26 +199,38 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 📷 Live QR-Code Scanner (Automatischer Start)")
     
-    # Render JavaScript Scanner
-    components.html(live_qr_scanner("setup"), height=320)
+    # Textfeld, in das JavaScript die ID direkt reinschreibt
+    placeholder_id = "SCANNER_TARGET_SETUP"
+    scanned_input = st.text_input("Gescannte ID / Manuelle Eingabe:", placeholder=placeholder_id, key="setup_manual_input")
     
-    scanned_input = st.text_input("Oder Fragen-ID manuell eintragen / Über Kamera erfasst:", placeholder="Z.B. 12")
-    
-    if st.button("Speichern & Spiel starten 🚀", type="primary"):
+    # Sobald das Feld durch JavaScript befüllt wird, triggert Python sofort das Spiel!
+    if scanned_input:
         st.session_state.gewaehlte_karte = karte
         st.session_state.spieler_namen = namen
         for name in namen:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        if scanned_input:
-            zeile = hole_spezifische_frage(scanned_input)
-            if zeile is not None:
-                st.session_state.aktuelle_frage = zeile
-        
-        if st.session_state.aktuelle_frage is None:
+        zeile = hole_spezifische_frage(scanned_input)
+        if zeile is not None:
+            st.session_state.aktuelle_frage = zeile
+        else:
             st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
             
+        st.session_state.setup_erledigt = True
+        st.session_state.ansicht = "spiel"
+        st.rerun()
+
+    # Kamera wird gerendert
+    render_live_scanner(placeholder_id)
+    
+    if st.button("Ohne QR-Code starten (Zufallsfrage) 🚀", type="primary"):
+        st.session_state.gewaehlte_karte = karte
+        st.session_state.spieler_namen = namen
+        for name in namen:
+            if name not in st.session_state.scores:
+                st.session_state.scores[name] = 0
+        st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
         st.session_state.setup_erledigt = True
         st.session_state.ansicht = "spiel"
         st.rerun()
@@ -302,24 +336,29 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
-        # --- HIER: LIVE AUTOSCANNER FÜR FOLGERUNDEN VOR DER KARTE ---
+        # --- HIER: AUTOMATISCHER LIVE SCANNER VOR DER GRAPHISCHEN AUFLÖSUNG ---
         st.subheader("📷 Nächsten QR-Code live vor die Kamera halten")
         
-        # Rendert den vollautomatischen Echtzeit-Scanner für die Folgerunde
-        components.html(live_qr_scanner(f"runde_{st.session_state.runde}"), height=320)
+        placeholder_runde_id = f"SCANNER_TARGET_RUNDE_{st.session_state.runde}"
+        naechster_input = st.text_input("Erfasste ID / Manuelle Eingabe:", placeholder=placeholder_runde_id, key=f"runde_manual_input_{st.session_state.runde}")
         
-        naechster_input = st.text_input("Erfasste ID / Manuelle Eingabe:", placeholder="Leer lassen für zufällige nächste Frage")
-        
-        if st.button("Nächste Runde starten ➡️", type="primary", use_container_width=True):
-            if naechster_input:
-                zeile = hole_spezifische_frage(naechster_input)
-                if zeile is not None:
-                    st.session_state.aktuelle_frage = zeile
-                else:
-                    st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
+        # Sobald JavaScript den QR-Code erfasst, wird diese Bedingung wahr und schaltet SOFORT weiter
+        if naechster_input:
+            zeile = hole_spezifische_frage(naechster_input)
+            if zeile is not None:
+                st.session_state.aktuelle_frage = zeile
             else:
                 st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
                 
+            st.session_state.runden_ergebnis = None
+            st.session_state.naechste_frage_bereit = None
+            st.rerun()
+
+        # Kamera rendern
+        render_live_scanner(placeholder_runde_id)
+        
+        if st.button("Überspringen & Zufällige nächste Frage ➡️", type="secondary", use_container_width=True):
+            st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
             st.session_state.runden_ergebnis = None
             st.session_state.naechste_frage_bereit = None
             st.rerun()
