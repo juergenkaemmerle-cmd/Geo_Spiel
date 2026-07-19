@@ -155,13 +155,13 @@ elif st.session_state.ansicht == "spiel":
             tipp_key = f"tipp_{st.session_state.runde}_{i}"
             tipps[name] = st.selectbox(f"{name}:", felder_liste, key=tipp_key, disabled=ist_aufgeloest)
 
-            if not ist_aufgeloest:
+    if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
             with st.spinner("Orakel ermittelt Koordinaten..."):
                 geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
                 
-                # HIER WAR DER TIPPFEHLER – JETZT KORRIGIERT:
+                # Behobener Tippfehler bei der Abfrage des Such-Zusatzes
                 if "such_zusatz" in KARTEN_DATEN[st.session_state.gewaehlte_karte]:
                     such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte]["such_zusatz"]
                 else:
@@ -230,14 +230,14 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.naechste_frage_bereit = frische_frage_ziehen(st.session_state.gewaehlte_karte)
                 st.rerun()
     else:
-        # --- HIER ERFOLGT DIE NEUE INTERAKTIVE KARTEN-DARSTELLUNG ---
+        # --- INTERAKTIVE KARTEN-DARSTELLUNG ---
         res = st.session_state.runden_ergebnis
         st.success(f"🏁 **Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
         st.caption(f"💡 *Hintergrund-Info: {res['info']}*")
         
         st.subheader("🗺️ Grafische Kartenauswertung:")
         
-        # 1. Daten für die Kartenelemente bauen
+        # Daten für die Kartenelemente vorbereiten
         df_tipps = res["tabelle"].copy()
         df_tipps["Ziel_Lon"] = res["ziel_lon"]
         df_tipps["Ziel_Lat"] = res["ziel_lat"]
@@ -248,40 +248,40 @@ elif st.session_state.ansicht == "spiel":
             "name": res["ziel"]
         }])
         
-        # 2. Pydeck Layer definieren
-        # Layer für Verbindungslinien (Tipp -> Ziel)
+        # Pydeck Layer definieren
+        # 1. Verbindungslinien zwischen Tipp und Ziel
         line_layer = pdk.Layer(
             "LineLayer",
             data=df_tipps,
             get_source_position="[Tipp_Lon, Tipp_Lat]",
             get_target_position="[Ziel_Lon, Ziel_Lat]",
-            get_color="[235, 94, 40, 200]", # Dynamisches Orange-Rot
+            get_color="[235, 94, 40, 200]",
             get_width=4,
             pickable=True
         )
         
-        # Layer für die Spieler-Tipps (Rote Punkte)
+        # 2. Die Tipps der Spieler (Rote Punkte)
         tipp_layer = pdk.Layer(
             "ScatterplotLayer",
             data=df_tipps,
             get_position="[Tipp_Lon, Tipp_Lat]",
-            get_color="[255, 75, 75]", # Rot
-            get_radius=15000, # Radius in Metern
+            get_color="[255, 75, 75]",
+            get_radius=15000,
             pickable=True,
             auto_highlight=True
         )
         
-        # Layer für das exakte Ergebnis (Grüner Punkt)
+        # 3. Das reale Ergebnis (Mintgrüner Punkt)
         ziel_layer = pdk.Layer(
             "ScatterplotLayer",
             data=df_ziel,
             get_position="[lon, lat]",
-            get_color="[46, 196, 182]", # Leuchtendes Mintgrün
+            get_color="[46, 196, 182]",
             get_radius=22000,
             pickable=True
         )
 
-        # Text-Labels für Spielernamen direkt auf der Karte
+        # 4. Text-Labels für Spielernamen über ihren Punkten
         label_layer = pdk.Layer(
             "TextLayer",
             data=df_tipps,
@@ -293,7 +293,7 @@ elif st.session_state.ansicht == "spiel":
             background_color="[0, 0, 0, 160]"
         )
         
-        # Kartenansicht zentrieren (Mitte von Deutschland)
+        # Kartenansicht auf die Mitte Deutschlands zentrieren
         view_state = pdk.ViewState(
             longitude=10.45,
             latitude=51.16,
@@ -301,11 +301,11 @@ elif st.session_state.ansicht == "spiel":
             pitch=0
         )
         
-        # Karte anzeigen (Nutzt ein sauberes, klares OpenStreetMap-Design ohne ablenkende 3D-Bauten)
+        # Karte rendern
         st.pydeck_chart(pdk.Deck(
             layers=[line_layer, tipp_layer, ziel_layer, label_layer],
             initial_view_state=view_state,
-            map_style="mapbox://styles/mapbox/light-v10", # Heller, übersichtlicher Stil
+            map_style="mapbox://styles/mapbox/light-v10",
             tooltip={"text": "{Spieler}: {Tipp}\nAbstand: {Abstand (km)} km"}
         ))
         
