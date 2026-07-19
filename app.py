@@ -76,7 +76,7 @@ def frische_frage_ziehen(karte_name):
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- DIE SAUBERE LIVE-SCANNER COMPONENT ---
+# --- DIE LIVE-SCANNER COMPONENT ---
 def st_qr_scanner(key):
     """
     Rendert einen HTML5-QR-Scanner. Nutzt ein unsichtbares Textfeld,
@@ -183,6 +183,8 @@ if not st.session_state.setup_erledigt:
         if zeile is not None:
             st.session_state.aktuelle_frage = zeile
             st.success(f"Frage geladen: {zeile['frage'][:30]}...")
+            # Bridge zurücksetzen für zukünftige Eingaben
+            st.session_state["bridge_setup_scanner"] = ""
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -283,6 +285,8 @@ elif st.session_state.ansicht == "spiel":
         st.divider()
         
         # --- KLAR GESTEUERTER SCAN-ABLAUF ---
+        scanner_key = f"runde_scanner_{st.session_state.runde}"
+        
         if not st.session_state.scan_modus_aktiv:
             c_btn1, c_btn2 = st.columns(2)
             with c_btn1:
@@ -302,7 +306,7 @@ elif st.session_state.ansicht == "spiel":
                 st.session_state.scan_modus_aktiv = False
                 st.rerun()
                 
-            scan_res = st_qr_scanner(f"runde_scanner_{st.session_state.runde}")
+            scan_res = st_qr_scanner(scanner_key)
             
             if scan_res:
                 zeile = hole_spezifische_frage(scan_res)
@@ -311,6 +315,9 @@ elif st.session_state.ansicht == "spiel":
                 else:
                     st.session_state.aktuelle_frage = st.session_state.naechste_frage_bereit
                     
+                # HIER PASSIERT DAS ZURÜCKSETZEN: Das verdeckte Feld für den nächsten Scan leeren
+                st.session_state[f"bridge_{scanner_key}"] = ""
+                
                 st.session_state.runden_ergebnis = None
                 st.session_state.naechste_frage_bereit = None
                 st.session_state.scan_modus_aktiv = False
