@@ -56,7 +56,7 @@ def lade_fragen():
         return df
     except Exception as e:
         st.error(f"Fehler beim Laden der fragen.csv: {e}")
-        return pd.DataFrame(columns=["karte", "frage", "ziel", "info"])
+        return pd.DataFrame(columns=["id", "karte", "frage", "ziel", "info"])
 
 fragen_df = lade_fragen()
 
@@ -94,6 +94,12 @@ def haversine_distance(lon1, lat1, lon2, lat2):
 def hole_spezifische_frage(frage_id):
     try:
         idx = int(str(frage_id).strip())
+        # Erst nach Spalte 'id' suchen, falls vorhanden
+        if "id" in fragen_df.columns:
+            treffer = fragen_df[fragen_df["id"].astype(str) == str(idx)]
+            if not treffer.empty:
+                return treffer.iloc[0]
+        # Fallback auf den Zeilen-Index
         if 0 <= idx < len(fragen_df):
             return fragen_df.iloc[idx]
     except Exception:
@@ -107,6 +113,7 @@ def frische_frage_ziehen(karte_name):
         return verfuegbare.sample(n=1).iloc[0]
     else:
         return pd.Series({
+            "id": -1,
             "frage": f"Keine Fragen für '{karte_name}' in der fragen.csv gefunden!",
             "ziel": "",
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
@@ -164,9 +171,10 @@ if not st.session_state.setup_erledigt:
             namen.append(name)
             
     st.divider()
-    st.markdown("### 🔍 Erste Frage festlegen (Optional)")
+    st.markdown("### 🔍 Erste Frage festlegen")
     
-    manuelle_id_setup = st.text_input("Spezifische Fragen-ID eingeben (leer lassen für Zufall):", key="input_setup_id", placeholder="z.B. 0, 1, 2...")
+    # Standardmäßig ist ID 1 als Vorauswahl vorgegeben
+    manuelle_id_setup = st.text_input("Spezifische Fragen-ID eingeben (leer lassen für Zufall):", value="1", key="input_setup_id", placeholder="z.B. 1, 2, 3...")
     if manuelle_id_setup.strip():
         zeile = hole_spezifische_frage(manuelle_id_setup)
         if zeile is not None:
@@ -179,7 +187,7 @@ if not st.session_state.setup_erledigt:
         st.session_state.aktuelle_frage = None
             
     if st.session_state.aktuelle_frage is not None:
-        st.info(f"Vorgemerkte Frage: {st.session_state.aktuelle_frage['frage']}")
+        st.info(f"Vorgemerkte Frage (ID {st.session_state.aktuelle_frage.get('id', '?')}): {st.session_state.aktuelle_frage['frage']}")
     
     if st.button("Spiel starten 🚀", type="primary", use_container_width=True):
         st.session_state.gewaehlte_karte = karte
@@ -188,9 +196,9 @@ if not st.session_state.setup_erledigt:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        # Wenn keine ID gewählt wurde, jetzt eine zufällige ziehen
+        # Falls keine ID eingegeben wurde oder ungültig war, Fallback auf ID 1 oder zufällige Frage
         if st.session_state.aktuelle_frage is None:
-            st.session_state.aktuelle_frage = frische_frage_ziehen(karte)
+            st.session_state.aktuelle_frage = hole_spezifische_frage(1) or frische_frage_ziehen(karte)
             
         st.session_state.setup_erledigt = True
         st.session_state.ansicht = "spiel"
@@ -199,11 +207,12 @@ if not st.session_state.setup_erledigt:
 # --- ANSICHT 1: DAS SPIEL ---
 elif st.session_state.ansicht == "spiel":
     if st.session_state.aktuelle_frage is None:
-        st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
+        st.session_state.aktuelle_frage = hole_spezifische_frage(1) or frische_frage_ziehen(st.session_state.gewaehlte_karte)
 
     ist_aufgeloest = st.session_state.runden_ergebnis is not None
+    frage_id_anzeige = st.session_state.aktuelle_frage.get('id', '?')
 
-    st.info(f"❓ **DIE QUIZ-FRAGE (Runde {st.session_state.runde + 1}):**\n\n### {st.session_state.aktuelle_frage['frage']}")
+    st.info(f"❓ **DIE QUIZ-FRAGE (ID {frage_id_anzeige} | Runde {st.session_state.runde + 1}):**\n\n### {st.session_state.aktuelle_frage['frage']}")
     st.divider()
 
     st.write("Wählt euer Rasterfeld auf dem gedruckten Brett:")
@@ -285,7 +294,7 @@ elif st.session_state.ansicht == "spiel":
         col_in, col_btn_id, col_btn_rand = st.columns([2, 1, 1])
         
         with col_in:
-            naechste_id = st.text_input("Spezifische Fragen-ID eingeben:", key=f"next_id_rd_{st.session_state.runde}", placeholder="z.B. 14")
+            naechste_id = st.text_input("Spezifische Fragen-ID eingeben:", key=f"next_id_rd_{st.session_state.runde}", placeholder="z.B. 2")
         
         with col_btn_id:
             st.write("") # Spacer für optische Ausrichtung zum Textfeld
@@ -358,6 +367,6 @@ elif st.session_state.ansicht == "score":
         st.session_state.scores = {name: 0 for name in st.session_state.spieler_namen}
         st.session_state.runde = 0
         st.session_state.runden_ergebnis = None
-        st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
+        st.session_state.aktuelle_frage = hole_spezifische_frage(1) or frische_frage_ziehen(st.session_state.gewaehlte_karte)
         st.session_state.ansicht = "spiel"
         st.rerun()
