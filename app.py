@@ -1,10 +1,27 @@
 import streamlit as st
 import pandas as pd
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderUnavailable, GeocoderTimedOut
 import math
 import pydeck as pdk
+import time
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
+
+# --- GEOLOCATOR HELPER FUNKTION ---
+def suche_ort_mit_geolocator(such_string):
+    # Eindeutiger UserAgent mit deiner E-Mail-Adresse und 10 Sekunden Timeout
+    geolocator = Nominatim(user_agent="geo_master_quiz_app_juegenkaemmerle@gmail.com", timeout=10)
+    
+    # Bis zu 3 Versuche bei temporären Ausfällen / Timeout
+    for versuch in range(3):
+        try:
+            location = geolocator.geocode(such_string)
+            return location
+        except (GeocoderUnavailable, GeocoderTimedOut):
+            time.sleep(1) # 1 Sekunde warten und nochmal versuchen
+            
+    return None
 
 # --- FRAGENKATALOG LADE-FUNKTION ---
 def lade_fragen():
@@ -178,13 +195,14 @@ elif st.session_state.ansicht == "spiel":
     if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
             with st.spinner("Koordinaten werden ermittelt..."):
-                geolocator = Nominatim(user_agent="geo_master_quiz_v2026")
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
                 such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Germany")
-                location = geolocator.geocode(such_string)
+                
+                # Hier wird die neue, sichere Geocoding-Funktion aufgerufen
+                location = suche_ort_mit_geolocator(such_string)
             
             if not location:
-                st.error(f"Fehler bei der Ortung für '{ziel_ort}'.")
+                st.error(f"Fehler bei der Ortung für '{ziel_ort}'. Der Kartendienst konnte nicht erreicht werden.")
             else:
                 ziel_lon, ziel_lat = location.longitude, location.latitude
                 minx, miny, maxx, maxy = KARTEN_DATEN[st.session_state.gewaehlte_karte]["bounds"]
