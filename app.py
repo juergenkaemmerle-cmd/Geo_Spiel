@@ -173,7 +173,7 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 🔍 Erste Frage festlegen")
     
-    # Standardmäßig ist ID 1 als Vorauswahl vorgegeben
+    # Standardmäßig ist ID 1 (Angela Merkel) als Vorauswahl vorgegeben
     manuelle_id_setup = st.text_input("Spezifische Fragen-ID eingeben (leer lassen für Zufall):", value="1", key="input_setup_id", placeholder="z.B. 1, 2, 3...")
     if manuelle_id_setup.strip():
         zeile = hole_spezifische_frage(manuelle_id_setup)
@@ -196,7 +196,7 @@ if not st.session_state.setup_erledigt:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        # Falls keine ID eingegeben wurde oder ungültig war, Fallback auf ID 1 oder zufällige Frage
+        # Standard-Start bei Frage ID 1
         if st.session_state.aktuelle_frage is None:
             st.session_state.aktuelle_frage = hole_spezifische_frage(1) or frische_frage_ziehen(karte)
             
