@@ -5,34 +5,44 @@ from geopy.exc import GeocoderUnavailable, GeocoderTimedOut, GeocoderRateLimited
 import math
 import pydeck as pdk
 import time
+import requests
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- GEOLOCATOR HELPER FUNKTION MIT CACHING & RATE-LIMIT HANDLING ---
-@st.cache_data(ttl=3600)  # Cacht Ortsergebnisse für 1 Stunde, um Serveranfragen zu minimieren
+# --- GEOLOCATOR HELPER FUNKTION MIT OPEN-METEO (OHNE RATE-LIMITS) & CACHING ---
+@st.cache_data(ttl=86400)  # Cacht Ortsergebnisse für 24 Stunden, um Serveranfragen zu sparen
 def suche_ort_mit_geolocator(such_string):
-    # Eindeutiger UserAgent mit E-Mail-Adresse und 10 Sekunden Timeout
-    geolocator = Nominatim(user_agent="geo_master_quiz_app_juegenkaemmerle@gmail.com", timeout=10)
-    
-    for versuch in range(3):  # Bis zu 3 Versuche bei Ausfällen oder Drosselung
-        try:
-            location = geolocator.geocode(such_string)
-            if location:
+    # 1. VERSUCH: Open-Meteo Geocoding API (Kein API-Key nötig, extrem schnell & zuverlässig auf Streamlit)
+    try:
+        reiner_ort = such_string.split(",")[0].strip()
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={reiner_ort}&count=1&language=de&format=json"
+        
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if "results" in data and len(data["results"]) > 0:
+                result = data["results"][0]
                 return {
-                    "address": location.address, 
-                    "longitude": location.longitude, 
-                    "latitude": location.latitude
+                    "address": f"{result.get('name')}, {result.get('country', '')}",
+                    "longitude": result["longitude"],
+                    "latitude": result["latitude"]
                 }
-            return None
+    except Exception:
+        pass  # Falls Open-Meteo fehlschlägt, weiter zum Fallback
 
-        except GeocoderRateLimited as e:
-            # Bei Rate-Limit automatisch die geforderte Zeit (oder 2s) pausieren
-            wartezeit = getattr(e, 'retry_after', 2) or 2
-            time.sleep(wartezeit)
+    # 2. VERSUCH (FALLBACK): Nominatim über Geopy mit Fehlerabfangung
+    try:
+        geolocator = Nominatim(user_agent="geo_master_quiz_app_juegenkaemmerle@gmail.com", timeout=5)
+        location = geolocator.geocode(such_string)
+        if location:
+            return {
+                "address": location.address, 
+                "longitude": location.longitude, 
+                "latitude": location.latitude
+            }
+    except Exception:
+        pass
 
-        except (GeocoderUnavailable, GeocoderTimedOut):
-            time.sleep(1.5)  # Kurz warten bei Netzwerk-Aussetzern
-            
     return None
 
 # --- FRAGENKATALOG LADE-FUNKTION ---
@@ -210,11 +220,11 @@ elif st.session_state.ansicht == "spiel":
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
                 such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Germany")
                 
-                # Robuster Geocoding-Aufruf mit Retry & Cache
+                # Schnelle Geocoding-Abfrage über Open-Meteo & Fallback
                 location = suche_ort_mit_geolocator(such_string)
             
             if not location:
-                st.error(f"Fehler bei der Ortung für '{ziel_ort}'. Der Kartendienst ist überlastet oder konnte den Ort nicht finden. Bitte kurz warten und nochmals klicken.")
+                st.error(f"Fehler bei der Ortung für '{ziel_ort}'. Der Ort konnte nicht gefunden werden. Bitte Eingabe prüfen oder erneut versuchen.")
             else:
                 ziel_lon, ziel_lat = location["longitude"], location["latitude"]
                 minx, miny, maxx, maxy = KARTEN_DATEN[st.session_state.gewaehlte_karte]["bounds"]
