@@ -1,45 +1,52 @@
 import streamlit as st
 import pandas as pd
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderUnavailable, GeocoderTimedOut, GeocoderRateLimited
 import math
 import pydeck as pdk
-import time
 import requests
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- GEOLOCATOR HELPER FUNKTION MIT OPEN-METEO (OHNE RATE-LIMITS) & CACHING ---
-@st.cache_data(ttl=86400)  # Cacht Ortsergebnisse für 24 Stunden, um Serveranfragen zu sparen
+# --- GEOLOCATOR HELPER FUNKTION MIT STRIKTER DEUTSCHLAND-EINSCHRÄNKUNG ---
+@st.cache_data(ttl=86400)
 def suche_ort_mit_geolocator(such_string):
-    # 1. VERSUCH: Open-Meteo Geocoding API (Kein API-Key nötig, extrem schnell & zuverlässig auf Streamlit)
+    reiner_ort = such_string.split(",")[0].strip()
+    
+    # Mögliche Suchbegriffe für den Fallback aufbauen
+    such_varianten = [
+        reiner_ort,
+        f"{reiner_ort}, Deutschland",
+        f"{reiner_ort} See"
+    ]
+    
+    # 1. VERSUCH: Nominatim (OSM) mit strikter Begrenzung auf Deutschland (country_codes="de")
     try:
-        reiner_ort = such_string.split(",")[0].strip()
-        url = f"https://geocoding-api.open-meteo.com/v1/search?name={reiner_ort}&count=1&language=de&format=json"
-        
+        geolocator = Nominatim(user_agent="geo_master_quiz_app_v3", timeout=5)
+        for variante in such_varianten:
+            location = geolocator.geocode(variante, country_codes="de")
+            if location:
+                return {
+                    "address": location.address,
+                    "longitude": location.longitude,
+                    "latitude": location.latitude
+                }
+    except Exception:
+        pass
+
+    # 2. VERSUCH: Open-Meteo API mit Filter auf country_code == DE
+    try:
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={reiner_ort}&count=10&language=de&format=json"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if "results" in data and len(data["results"]) > 0:
-                result = data["results"][0]
-                return {
-                    "address": f"{result.get('name')}, {result.get('country', '')}",
-                    "longitude": result["longitude"],
-                    "latitude": result["latitude"]
-                }
-    except Exception:
-        pass  # Falls Open-Meteo fehlschlägt, weiter zum Fallback
-
-    # 2. VERSUCH (FALLBACK): Nominatim über Geopy mit Fehlerabfangung
-    try:
-        geolocator = Nominatim(user_agent="geo_master_quiz_app_juegenkaemmerle@gmail.com", timeout=5)
-        location = geolocator.geocode(such_string)
-        if location:
-            return {
-                "address": location.address, 
-                "longitude": location.longitude, 
-                "latitude": location.latitude
-            }
+            if "results" in data:
+                for result in data["results"]:
+                    if result.get("country_code") == "DE":
+                        return {
+                            "address": f"{result.get('name')}, {result.get('admin1', '')}, Deutschland",
+                            "longitude": result["longitude"],
+                            "latitude": result["latitude"]
+                        }
     except Exception:
         pass
 
@@ -61,7 +68,7 @@ def lade_fragen():
 fragen_df = lade_fragen()
 
 KARTEN_DATEN = {
-    "Deutschland 🇩🇪": {"bounds": (5.20, 47.27, 15.70, 54.91), "such_zusatz": ", Germany"}
+    "Deutschland 🇩🇪": {"bounds": (5.20, 47.27, 15.70, 54.91), "such_zusatz": ", Deutschland"}
 }
 
 GRID_SIZE = 20
@@ -94,14 +101,12 @@ def haversine_distance(lon1, lat1, lon2, lat2):
 def hole_spezifische_frage(frage_id):
     try:
         idx = int(str(frage_id).strip())
-        # Erst nach Spalte 'id' suchen, falls vorhanden
         if "id" in fragen_df.columns:
             treffer = fragen_df[fragen_df["id"].astype(str) == str(idx)]
             if not treffer.empty:
                 return treffer.iloc[0]
-        # Fallback auf den Zeilen-Index
-        if 0 <= idx < len(fragen_df):
-            return fragen_df.iloc[idx]
+        if 0 <= (idx - 1) < len(fragen_df):
+            return fragen_df.iloc[idx - 1]
     except Exception:
         pass
     return None
@@ -173,7 +178,6 @@ if not st.session_state.setup_erledigt:
     st.divider()
     st.markdown("### 🔍 Erste Frage festlegen")
     
-    # Standardmäßig ist ID 1 (Angela Merkel) als Vorauswahl vorgegeben
     manuelle_id_setup = st.text_input("Spezifische Fragen-ID eingeben (leer lassen für Zufall):", value="1", key="input_setup_id", placeholder="z.B. 1, 2, 3...")
     if manuelle_id_setup.strip():
         zeile = hole_spezifische_frage(manuelle_id_setup)
@@ -196,7 +200,6 @@ if not st.session_state.setup_erledigt:
             if name not in st.session_state.scores:
                 st.session_state.scores[name] = 0
         
-        # Standard-Start bei Frage ID 1
         if st.session_state.aktuelle_frage is None:
             st.session_state.aktuelle_frage = hole_spezifische_frage(1) or frische_frage_ziehen(karte)
             
@@ -227,9 +230,8 @@ elif st.session_state.ansicht == "spiel":
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
             with st.spinner("Koordinaten werden ermittelt..."):
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
-                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Germany")
+                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Deutschland")
                 
-                # Schnelle Geocoding-Abfrage über Open-Meteo & Fallback
                 location = suche_ort_mit_geolocator(such_string)
             
             if not location:
@@ -288,7 +290,7 @@ elif st.session_state.ansicht == "spiel":
         
         st.divider()
         
-        # --- NATIVE STEUERUNG FÜR DIE NÄCHSTE RUNDE ---
+        # --- STEUERUNG FÜR DIE NÄCHSTE RUNDE ---
         st.subheader("➡️ Nächste Runde vorbereiten")
         
         col_in, col_btn_id, col_btn_rand = st.columns([2, 1, 1])
@@ -297,7 +299,7 @@ elif st.session_state.ansicht == "spiel":
             naechste_id = st.text_input("Spezifische Fragen-ID eingeben:", key=f"next_id_rd_{st.session_state.runde}", placeholder="z.B. 2")
         
         with col_btn_id:
-            st.write("") # Spacer für optische Ausrichtung zum Textfeld
+            st.write("") 
             if st.button("Per ID laden 🎯", use_container_width=True):
                 if naechste_id.strip():
                     zeile = hole_spezifische_frage(naechste_id)
@@ -311,7 +313,7 @@ elif st.session_state.ansicht == "spiel":
                     st.warning("Bitte ID eingeben!")
                     
         with col_btn_rand:
-            st.write("") # Spacer
+            st.write("") 
             if st.button("Zufällige Frage 🎲", use_container_width=True, type="secondary"):
                 st.session_state.aktuelle_frage = frische_frage_ziehen(st.session_state.gewaehlte_karte)
                 st.session_state.runden_ergebnis = None
