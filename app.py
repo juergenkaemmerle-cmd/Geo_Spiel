@@ -4,24 +4,29 @@ from geopy.geocoders import Nominatim
 import math
 import pydeck as pdk
 import requests
+import re
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- GEOLOCATOR HELPER FUNKTION MIT STRIKTER DEUTSCHLAND-EINSCHRÄNKUNG ---
+# --- GEOLOCATOR HELPER FUNKTION MIT KLAMMER-CLEANUP & DEUTSCHLAND-FILTER ---
 @st.cache_data(ttl=86400)
 def suche_ort_mit_geolocator(such_string):
+    # 1. Kommas abspalten
     reiner_ort = such_string.split(",")[0].strip()
     
-    # Mögliche Suchbegriffe für den Fallback aufbauen
+    # 2. Klammern entfernen (z. B. "Rust (Baden)" -> "Rust", "Alpsee (Schwangau)" -> "Alpsee")
+    reiner_ort_ohne_klammern = re.sub(r"\s*\([^)]*\)", "", reiner_ort).strip()
+    
+    # 3. Suchvarianten aufbauen
     such_varianten = [
-        reiner_ort,
-        f"{reiner_ort}, Deutschland",
-        f"{reiner_ort} See"
+        f"{reiner_ort_ohne_klammern}, Deutschland",
+        reiner_ort_ohne_klammern,
+        f"{reiner_ort_ohne_klammern} See"
     ]
     
     # 1. VERSUCH: Nominatim (OSM) mit strikter Begrenzung auf Deutschland (country_codes="de")
     try:
-        geolocator = Nominatim(user_agent="geo_master_quiz_app_v3", timeout=5)
+        geolocator = Nominatim(user_agent="geo_master_quiz_app_v4", timeout=5)
         for variante in such_varianten:
             location = geolocator.geocode(variante, country_codes="de")
             if location:
@@ -35,7 +40,7 @@ def suche_ort_mit_geolocator(such_string):
 
     # 2. VERSUCH: Open-Meteo API mit Filter auf country_code == DE
     try:
-        url = f"https://geocoding-api.open-meteo.com/v1/search?name={reiner_ort}&count=10&language=de&format=json"
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={reiner_ort_ohne_klammern}&count=10&language=de&format=json"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
