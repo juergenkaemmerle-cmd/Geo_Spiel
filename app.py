@@ -1,25 +1,37 @@
 import streamlit as st
 import pandas as pd
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderUnavailable, GeocoderTimedOut
+from geopy.exc import GeocoderUnavailable, GeocoderTimedOut, GeocoderRateLimited
 import math
 import pydeck as pdk
 import time
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- GEOLOCATOR HELPER FUNKTION ---
+# --- GEOLOCATOR HELPER FUNKTION MIT CACHING & RATE-LIMIT HANDLING ---
+@st.cache_data(ttl=3600)  # Cacht Ortsergebnisse für 1 Stunde, um Serveranfragen zu minimieren
 def suche_ort_mit_geolocator(such_string):
-    # Eindeutiger UserAgent mit deiner E-Mail-Adresse und 10 Sekunden Timeout
+    # Eindeutiger UserAgent mit E-Mail-Adresse und 10 Sekunden Timeout
     geolocator = Nominatim(user_agent="geo_master_quiz_app_juegenkaemmerle@gmail.com", timeout=10)
     
-    # Bis zu 3 Versuche bei temporären Ausfällen / Timeout
-    for versuch in range(3):
+    for versuch in range(3):  # Bis zu 3 Versuche bei Ausfällen oder Drosselung
         try:
             location = geolocator.geocode(such_string)
-            return location
+            if location:
+                return {
+                    "address": location.address, 
+                    "longitude": location.longitude, 
+                    "latitude": location.latitude
+                }
+            return None
+
+        except GeocoderRateLimited as e:
+            # Bei Rate-Limit automatisch die geforderte Zeit (oder 2s) pausieren
+            wartezeit = getattr(e, 'retry_after', 2) or 2
+            time.sleep(wartezeit)
+
         except (GeocoderUnavailable, GeocoderTimedOut):
-            time.sleep(1) # 1 Sekunde warten und nochmal versuchen
+            time.sleep(1.5)  # Kurz warten bei Netzwerk-Aussetzern
             
     return None
 
@@ -198,13 +210,13 @@ elif st.session_state.ansicht == "spiel":
                 ziel_ort = st.session_state.aktuelle_frage["ziel"]
                 such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Germany")
                 
-                # Hier wird die neue, sichere Geocoding-Funktion aufgerufen
+                # Robuster Geocoding-Aufruf mit Retry & Cache
                 location = suche_ort_mit_geolocator(such_string)
             
             if not location:
-                st.error(f"Fehler bei der Ortung für '{ziel_ort}'. Der Kartendienst konnte nicht erreicht werden.")
+                st.error(f"Fehler bei der Ortung für '{ziel_ort}'. Der Kartendienst ist überlastet oder konnte den Ort nicht finden. Bitte kurz warten und nochmals klicken.")
             else:
-                ziel_lon, ziel_lat = location.longitude, location.latitude
+                ziel_lon, ziel_lat = location["longitude"], location["latitude"]
                 minx, miny, maxx, maxy = KARTEN_DATEN[st.session_state.gewaehlte_karte]["bounds"]
                 
                 pct_x = (ziel_lon - minx) / (maxx - minx)
