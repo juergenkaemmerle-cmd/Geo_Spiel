@@ -183,12 +183,32 @@ elif st.session_state.ansicht == "spiel":
     st.divider()
 
     st.write("Wählt euer Rasterfeld auf dem gedruckten Brett:")
-    tipps = {}
-    cols_tipps = st.columns(min(len(st.session_state.spieler_namen), 3))
-    for i, name in enumerate(st.session_state.spieler_namen):
-        with cols_tipps[i % 3]:
-            tipp_key = f"tipp_{st.session_state.runde}_{i}"
-            tipps[name] = st.selectbox(f"{name}:", felder_liste, key=tipp_key, disabled=ist_aufgeloest)
+tipps = {}
+cols_tipps = st.columns(min(len(st.session_state.spieler_namen), 3))
+
+for i, name in enumerate(st.session_state.spieler_namen):
+    with cols_tipps[i % 3]:
+        st.markdown(f"**{name}**")
+        
+        # Zwei nebeneinander liegende Spalten für Buchstabe und Zahl
+        c_buchstabe, c_zahl = st.columns(2)
+        
+        with c_buchstabe:
+            b_val = st.selectbox(
+                "Zeile", 
+                y_achsen_werte, 
+                key=f"b_{st.session_state.runde}_{i}", 
+                disabled=ist_aufgeloest
+            )
+        with c_zahl:
+            z_val = st.selectbox(
+                "Spalte", 
+                x_achsen_werte, 
+                key=f"z_{st.session_state.runde}_{i}", 
+                disabled=ist_aufgeloest
+            )
+            
+        tipps[name] = f"{b_val}-{z_val}"
 
     if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
