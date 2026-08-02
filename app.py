@@ -16,7 +16,6 @@ KARTEN_DATEN = {
 GRID_SIZE = 20
 x_achsen_werte = [str(i) for i in range(1, GRID_SIZE + 1)]
 y_achsen_werte = [chr(i) for i in range(ord('A'), ord('A') + GRID_SIZE)]
-felder_liste = [f"{b}-{z}" for b in y_achsen_werte for z in x_achsen_werte]
 
 # --- HELPER FUNKTIONEN ---
 def get_field_center_gps(feld, karte_name):
@@ -183,38 +182,39 @@ elif st.session_state.ansicht == "spiel":
     st.divider()
 
     st.write("Wählt euer Rasterfeld auf dem gedruckten Brett:")
-tipps = {}
-cols_tipps = st.columns(min(len(st.session_state.spieler_namen), 3))
+    tipps = {}
+    cols_tipps = st.columns(min(len(st.session_state.spieler_namen), 3))
 
-for i, name in enumerate(st.session_state.spieler_namen):
-    with cols_tipps[i % 3]:
-        st.markdown(f"**{name}**")
-        
-        # Zwei nebeneinander liegende Spalten für Buchstabe und Zahl
-        c_buchstabe, c_zahl = st.columns(2)
-        
-        with c_buchstabe:
-            b_val = st.selectbox(
-                "Zeile", 
-                y_achsen_werte, 
-                key=f"b_{st.session_state.runde}_{i}", 
-                disabled=ist_aufgeloest
-            )
-        with c_zahl:
-            z_val = st.selectbox(
-                "Spalte", 
-                x_achsen_werte, 
-                key=f"z_{st.session_state.runde}_{i}", 
-                disabled=ist_aufgeloest
-            )
+    # --- OPTIMIERTE 2-STUFEN-EINGABE FÜR SMARTPHONES ---
+    for i, name in enumerate(st.session_state.spieler_namen):
+        with cols_tipps[i % 3]:
+            st.markdown(f"**{name}**")
+            c_buchstabe, c_zahl = st.columns(2)
             
-        tipps[name] = f"{b_val}-{z_val}"
+            with c_buchstabe:
+                b_val = st.selectbox(
+                    "Zeile", 
+                    y_achsen_werte, 
+                    key=f"b_{st.session_state.runde}_{i}", 
+                    disabled=ist_aufgeloest
+                )
+            with c_zahl:
+                z_val = st.selectbox(
+                    "Spalte", 
+                    x_achsen_werte, 
+                    key=f"z_{st.session_state.runde}_{i}", 
+                    disabled=ist_aufgeloest
+                )
+                
+            tipps[name] = f"{b_val}-{z_val}"
+
+    st.divider()
 
     if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
             ziel_ort = st.session_state.aktuelle_frage["ziel"]
             
-            # --- DIRECT KOORDINATEN AUS DER CSV LESEN ---
+            # --- DIREKTE KOORDINATEN AUS DER CSV LESEN ---
             try:
                 ziel_lat = float(st.session_state.aktuelle_frage["latitude"])
                 ziel_lon = float(st.session_state.aktuelle_frage["longitude"])
