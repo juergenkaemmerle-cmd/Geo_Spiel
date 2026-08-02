@@ -73,7 +73,12 @@ def lade_fragen():
 fragen_df = lade_fragen()
 
 KARTEN_DATEN = {
-    "Deutschland 🇩🇪": {"bounds": (5.20, 47.27, 15.70, 54.91), "such_zusatz": ", Deutschland"}
+    "Deutschland 🇩🇪": {
+        # Exakt berechnet für 37,7 x 37,7 cm Reines Festland (ohne Sylt)
+        # Min Lon (West), Min Lat (Süd), Max Lon (Ost), Max Lat (Nord)
+        "bounds": (3.336, 47.270, 17.572, 54.912), 
+        "such_zusatz": ", Deutschland"
+    }
 }
 
 GRID_SIZE = 20
