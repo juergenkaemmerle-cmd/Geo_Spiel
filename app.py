@@ -1,99 +1,36 @@
 import streamlit as st
 import pandas as pd
-from geopy.geocoders import Nominatim
 import math
 import pydeck as pdk
-import requests
-import re
 
 st.set_page_config(page_title="Geo-Master Quiz", page_icon="🎲", layout="centered")
 
-# --- GEOLOCATOR HELPER FUNKTION MIT KLAMMER-CLEANUP & DEUTSCHLAND-FILTER ---
-@st.cache_data(ttl=86400)
-def suche_ort_mit_geolocator(such_string):
-    # 1. Kommas abspalten
-    reiner_ort = such_string.split(",")[0].strip()
-    
-    # 2. Klammern entfernen (z. B. "Rust (Baden)" -> "Rust", "Alpsee (Schwangau)" -> "Alpsee")
-    reiner_ort_ohne_klammern = re.sub(r"\s*\([^)]*\)", "", reiner_ort).strip()
-    
-    # 3. Suchvarianten aufbauen
-    such_varianten = [
-        f"{reiner_ort_ohne_klammern}, Deutschland",
-        reiner_ort_ohne_klammern,
-        f"{reiner_ort_ohne_klammern} See"
-    ]
-    
-    # 1. VERSUCH: Nominatim (OSM) mit strikter Begrenzung auf Deutschland (country_codes="de")
-    try:
-        geolocator = Nominatim(user_agent="geo_master_quiz_app_v4", timeout=5)
-        for variante in such_varianten:
-            location = geolocator.geocode(variante, country_codes="de")
-            if location:
-                return {
-                    "address": location.address,
-                    "longitude": location.longitude,
-                    "latitude": location.latitude
-                }
-    except Exception:
-        pass
-
-    # 2. VERSUCH: Open-Meteo API mit Filter auf country_code == DE
-    try:
-        url = f"https://geocoding-api.open-meteo.com/v1/search?name={reiner_ort_ohne_klammern}&count=10&language=de&format=json"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if "results" in data:
-                for result in data["results"]:
-                    if result.get("country_code") == "DE":
-                        return {
-                            "address": f"{result.get('name')}, {result.get('admin1', '')}, Deutschland",
-                            "longitude": result["longitude"],
-                            "latitude": result["latitude"]
-                        }
-    except Exception:
-        pass
-
-    return None
-
-# --- FRAGENKATALOG LADE-FUNKTION ---
-def lade_fragen():
-    try:
-        df = pd.read_csv("fragen.csv", sep=";")
-        df.columns = df.columns.str.strip()
-        for col in df.columns:
-            if df[col].dtype == "object":
-                df[col] = df[col].str.strip()
-        return df
-    except Exception as e:
-        st.error(f"Fehler beim Laden der fragen.csv: {e}")
-        return pd.DataFrame(columns=["id", "karte", "frage", "ziel", "info"])
-
-fragen_df = lade_fragen()
-
+# --- KARTEN-DATEN (PAPIERKARTE 37,7 cm x 37,7 cm OHNE SYLT) ---
 KARTEN_DATEN = {
     "Deutschland 🇩🇪": {
-        # Exakt berechnet für 37,7 x 37,7 cm Reines Festland (ohne Sylt)
-        # Min Lon (West), Min Lat (Süd), Max Lon (Ost), Max Lat (Nord)
-        "bounds": (3.336, 47.270, 17.572, 54.912), 
-        "such_zusatz": ", Deutschland"
+        # Bounds: (Min Lon/West, Min Lat/Süd, Max Lon/Ost, Max Lat/Nord)
+        "bounds": (3.336, 47.270, 17.572, 54.912)
     }
 }
 
 GRID_SIZE = 20
 x_achsen_werte = [str(i) for i in range(1, GRID_SIZE + 1)]
 y_achsen_werte = [chr(i) for i in range(ord('A'), ord('A') + GRID_SIZE)]
-felder_liste = [b+z for b in y_achsen_werte for z in x_achsen_werte]
+felder_liste = [f"{b}-{z}" for b in y_achsen_werte for z in x_achsen_werte]
 
+# --- HELPER FUNKTIONEN ---
 def get_field_center_gps(feld, karte_name):
     minx, miny, maxx, maxy = KARTEN_DATEN[karte_name]["bounds"]
-    b_char = feld[0].upper()
-    z_str = feld[1:]
+    teile = feld.split("-")
+    b_char = teile[0].upper()
+    z_str = teile[1]
+    
     y_idx = y_achsen_werte.index(b_char)  
     x_idx = x_achsen_werte.index(z_str)   
+    
     lon_step = (maxx - minx) / GRID_SIZE
     lat_step = (maxy - miny) / GRID_SIZE
+    
     center_lon = minx + (x_idx + 0.5) * lon_step
     center_lat = maxy - (y_idx + 0.5) * lat_step  
     return center_lon, center_lat
@@ -107,6 +44,21 @@ def haversine_distance(lon1, lat1, lon2, lat2):
     a = math.sin(dlat / 2)**2 + math.cos(rad_lat1) * math.cos(rad_lat2) * math.sin(dlon / 2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
+
+# --- FRAGENKATALOG LADE-FUNKTION ---
+def lade_fragen():
+    try:
+        df = pd.read_csv("fragen.csv", sep=";")
+        df.columns = df.columns.str.strip()
+        for col in df.columns:
+            if df[col].dtype == "object":
+                df[col] = df[col].str.strip()
+        return df
+    except Exception as e:
+        st.error(f"Fehler beim Laden der fragen.csv: {e}")
+        return pd.DataFrame(columns=["id", "karte", "frage", "ziel", "latitude", "longitude", "info"])
+
+fragen_df = lade_fragen()
 
 def hole_spezifische_frage(frage_id):
     try:
@@ -131,10 +83,12 @@ def frische_frage_ziehen(karte_name):
             "id": -1,
             "frage": f"Keine Fragen für '{karte_name}' in der fragen.csv gefunden!",
             "ziel": "",
+            "latitude": 0.0,
+            "longitude": 0.0,
             "info": "Überprüfe die Spalte 'karte' in deiner CSV."
         })
 
-# --- APP STATE DEFAULT INIT ---
+# --- APP STATE INIT ---
 if "setup_erledigt" not in st.session_state:
     st.session_state.setup_erledigt = False
 if "ansicht" not in st.session_state:
@@ -171,7 +125,7 @@ if st.session_state.setup_erledigt:
             st.rerun()
     st.divider()
 
-# --- ANSICHT 0: SETUP (START) ---
+# --- SETUP ANSICHT ---
 if not st.session_state.setup_erledigt:
     st.subheader("🛠️ Spiel-Setup")
     karte = st.selectbox("Welche Karte liegt auf dem Tisch?", list(KARTEN_DATEN.keys()))
@@ -217,7 +171,7 @@ if not st.session_state.setup_erledigt:
         st.session_state.ansicht = "spiel"
         st.rerun()
 
-# --- ANSICHT 1: DAS SPIEL ---
+# --- SPIEL ANSICHT ---
 elif st.session_state.ansicht == "spiel":
     if st.session_state.aktuelle_frage is None:
         st.session_state.aktuelle_frage = hole_spezifische_frage(1) or frische_frage_ziehen(st.session_state.gewaehlte_karte)
@@ -238,58 +192,60 @@ elif st.session_state.ansicht == "spiel":
 
     if not ist_aufgeloest:
         if st.button("Runde auflösen! 🎲", type="primary", use_container_width=True):
-            with st.spinner("Koordinaten werden ermittelt..."):
-                ziel_ort = st.session_state.aktuelle_frage["ziel"]
-                such_string = ziel_ort + KARTEN_DATEN[st.session_state.gewaehlte_karte].get("such_zusatz", ", Deutschland")
-                
-                location = suche_ort_mit_geolocator(such_string)
+            ziel_ort = st.session_state.aktuelle_frage["ziel"]
             
-            if not location:
-                st.error(f"Fehler bei der Ortung für '{ziel_ort}'. Der Ort konnte nicht gefunden werden. Bitte Eingabe prüfen oder erneut versuchen.")
-            else:
-                ziel_lon, ziel_lat = location["longitude"], location["latitude"]
-                minx, miny, maxx, maxy = KARTEN_DATEN[st.session_state.gewaehlte_karte]["bounds"]
-                
-                pct_x = (ziel_lon - minx) / (maxx - minx)
-                corr_x_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_x * GRID_SIZE))))
-                korrekte_zahl = x_achsen_werte[corr_x_idx]
-                
-                pct_y = 1.0 - ((ziel_lat - miny) / (maxy - miny))
-                corr_y_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_y * GRID_SIZE))))
-                korrekter_buchstabe = y_achsen_werte[corr_y_idx]
-                
-                korrektes_feld = f"{korrekter_buchstabe}{korrekte_zahl}"
-                ergebnisse = []
-                abstaende_km = {}
-                
-                for name, tipp in tipps.items():
-                    tx, ty = get_field_center_gps(tipp, st.session_state.gewaehlte_karte)
-                    distanz = haversine_distance(tx, ty, ziel_lon, ziel_lat)
-                    if tipp == korrektes_feld:
-                        st.session_state.scores[name] += 3
-                    abstaende_km[name] = distanz
-                    ergebnisse.append({
-                        "Spieler": name, "Tipp": tipp, "Tipp_Lon": tx, "Tipp_Lat": ty,
-                        "Abstand (km)": round(distanz, 1), "Volltreffer": "🎉 Ja (+3 Pkt)" if tipp == korrektes_feld else "Nein"
-                    })
-                
-                if abstaende_km:
-                    min_distanz = min(abstaende_km.values())
-                    for idx, erg in enumerate(ergebnisse):
-                        sp_name = erg["Spieler"]
-                        if abstaende_km[sp_name] == min_distanz:
-                            st.session_state.scores[sp_name] += 1
-                            ergebnisse[idx]["Trostpunkt"] = "🎯 Ja (+1 Pkt)"
-                        else:
-                            ergebnisse[idx]["Trostpunkt"] = "Nein"
-                
-                st.session_state.runde += 1
-                st.session_state.runden_ergebnis = {
-                    "ziel": ziel_ort.upper(), "ziel_lon": ziel_lon, "ziel_lat": ziel_lat,
-                    "info": st.session_state.aktuelle_frage['info'], "feld": korrektes_feld,
-                    "tabelle": pd.DataFrame(ergebnisse)
-                }
-                st.rerun()
+            # --- DIRECT KOORDINATEN AUS DER CSV LESEN ---
+            try:
+                ziel_lat = float(st.session_state.aktuelle_frage["latitude"])
+                ziel_lon = float(st.session_state.aktuelle_frage["longitude"])
+            except (ValueError, KeyError):
+                st.error("Fehler: In der CSV fehlen 'latitude' oder 'longitude' für diese Frage.")
+                st.stop()
+
+            minx, miny, maxx, maxy = KARTEN_DATEN[st.session_state.gewaehlte_karte]["bounds"]
+            
+            # X (Spalte) berechnen
+            pct_x = (ziel_lon - minx) / (maxx - minx)
+            corr_x_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_x * GRID_SIZE))))
+            korrekte_zahl = x_achsen_werte[corr_x_idx]
+            
+            # Y (Zeile) berechnen
+            pct_y = 1.0 - ((ziel_lat - miny) / (maxy - miny))
+            corr_y_idx = max(0, min(GRID_SIZE - 1, int(math.floor(pct_y * GRID_SIZE))))
+            korrekter_buchstabe = y_achsen_werte[corr_y_idx]
+            
+            korrektes_feld = f"{korrekter_buchstabe}-{korrekte_zahl}"
+            ergebnisse = []
+            abstaende_km = {}
+            
+            for name, tipp in tipps.items():
+                tx, ty = get_field_center_gps(tipp, st.session_state.gewaehlte_karte)
+                distanz = haversine_distance(tx, ty, ziel_lon, ziel_lat)
+                if tipp == korrektes_feld:
+                    st.session_state.scores[name] += 3
+                abstaende_km[name] = distanz
+                ergebnisse.append({
+                    "Spieler": name, "Tipp": tipp, "Tipp_Lon": tx, "Tipp_Lat": ty,
+                    "Abstand (km)": round(distanz, 1), "Volltreffer": "🎉 Ja (+3 Pkt)" if tipp == korrektes_feld else "Nein"
+                })
+            
+            if abstaende_km:
+                min_distanz = min(abstaende_km.values())
+                for idx, erg in enumerate(ergebnisse):
+                    sp_name = erg["Spieler"]
+                    if abstaende_km[sp_name] == min_distanz:
+                        st.session_state.scores[sp_name] += 1
+                        ergebnisse[idx]["Trostpunkt"] = "🎯 Ja (+1 Pkt)"
+                    else:
+                        ergebnisse[idx]["Trostpunkt"] = "Nein"
+            
+            st.session_state.runde += 1
+            st.session_state.runden_ergebnis = {
+                "ziel": ziel_ort.upper(), "ziel_lon": ziel_lon, "ziel_lat": ziel_lat,
+                "info": st.session_state.aktuelle_frage['info'], "feld": korrektes_feld,
+                "tabelle": pd.DataFrame(ergebnisse)
+            }
+            st.rerun()
     else:
         res = st.session_state.runden_ergebnis
         st.success(f"🏁 **Auflösung: {res['ziel']}** (Liegt im Feld **{res['feld']}**)")
@@ -299,8 +255,6 @@ elif st.session_state.ansicht == "spiel":
         st.table(res["tabelle"].set_index("Spieler").drop(columns=["Tipp_Lon", "Tipp_Lat"]))
         
         st.divider()
-        
-        # --- STEUERUNG FÜR DIE NÄCHSTE RUNDE ---
         st.subheader("➡️ Nächste Runde vorbereiten")
         
         col_in, col_btn_id, col_btn_rand = st.columns([2, 1, 1])
@@ -330,9 +284,7 @@ elif st.session_state.ansicht == "spiel":
                 st.rerun()
         
         st.divider()
-        
-        # --- MAP LAYER ---
-        st.subheader("🗺️ Visueller Abgleich auf der Deutschlandkarte:")
+        st.subheader("🗺️ Visueller Abgleich auf der Karte:")
         df_tipps = res["tabelle"].copy()
         df_tipps["Ziel_Lon"] = res["ziel_lon"]
         df_tipps["Ziel_Lat"] = res["ziel_lat"]
@@ -364,7 +316,7 @@ elif st.session_state.ansicht == "spiel":
             map_style=None
         ))
 
-# --- ANSICHT 2: PUNKTESTAND ---
+# --- SCORE ANSICHT ---
 elif st.session_state.ansicht == "score":
     st.subheader("📊 Globaler Punktestand")
     score_data = [{"Spieler": k, "Gesamtpunkte": v} for k, v in st.session_state.scores.items() if k in st.session_state.spieler_namen]
